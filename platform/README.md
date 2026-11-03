@@ -1,5 +1,8 @@
 # ProjectSpec / platform
 
+> **Расположение (с 2026-11-03).** Эта папка — `C:\Users\Андрей\Desktop\project\platform\ProjectDocumentation-OpenSource\platform`,
+> отдельный git-репозиторий `ProjectDocumentation-OpenSource`. Прежняя папка `C:\Users\Андрей\Desktop\project\ProjectSpec` устарела.
+
 Спецификация и поэтапный план по доделкам модуля Love (встречи, ссылки, навигатор офиса) после ветки `FUSIO-1307`.
 
 Источник требований: отчёт по ветке `FUSIO-1307`, коммит `0503dfdca6` поверх develop `4139f7f3c7`.
@@ -28,10 +31,14 @@ platform/
 ├── diagrams.md                 визуальные графики этапов и потоков
 ├── handoff.md                  рабочее состояние: ветка, стенд, что осталось
 ├── README.md                   этот файл
+├── .github/
+│   ├── prompts/opsx-*.prompt.md    промпты операций OpenSpec
+│   └── skills/openspec-*/SKILL.md  те же операции как агентские скиллы
 └── openspec/
     ├── config.yaml             конфиг OpenSpec (язык артефактов — ru)
     ├── specs/                  основная база требований (наполняется при archive)
     └── changes/
+        ├── love-meeting-link/      гостевая ссылка на ветке FUSIO-1307-livekit-shared-link
         └── love-meetings-followups/
             ├── proposal.md     зачем и что меняется
             ├── design.md       как, риски, открытые вопросы
@@ -46,7 +53,7 @@ platform/
 Установлено глобально: `@fission-ai/openspec@1.15.0` (`npm i -g @fission-ai/openspec`).
 
 ```bash
-cd C:/Users/Андрей/Desktop/project/ProjectSpec/platform
+cd C:/Users/Андрей/Desktop/project/platform/ProjectDocumentation-OpenSource/platform
 
 openspec list                                   # изменения в работе
 openspec status --change love-meetings-followups  # прогресс по артефактам

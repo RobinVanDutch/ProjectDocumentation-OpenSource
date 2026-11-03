@@ -1,5 +1,9 @@
 # Tasks
 
+> **Поглощено PR #428 (2026-11-02).** Задачи про `restartMeeting`, `Scheduled`/`Finished` и флаг `startOnLink`
+> закрыты слиянием — кода, который они описывают, больше нет. Из выполненных живыми остаются 8.1–8.3
+> (валидация имени гостя и стабильный `personToken`). Актуальные задачи — в `love-meetings-pr428-gaps/tasks.md`.
+
 ## 1. Сервер: перезапуск и комната
 
 - [x] 1.1 `WorkspaceClient.restartMeeting` (`services/love/src/workspaceClient.ts`): `status: Active`, `meetingEnd: undefined`, `transcriptionState`/`recordingState` в `NotStarted`, ранний выход при уже `Active` — проверка: `get_errors` чистый; `activateMeeting` (защита от stale-клиента) не тронут.
