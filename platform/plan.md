@@ -12,6 +12,11 @@
 > наоборот, есть. Актуальный статус каждого этапа — `audit-pr-428.md` §2–§3 (сверка) и §12 (что применено);
 > остаток работ вынесен в `openspec/changes/love-meetings-pr428-gaps/` — работать нужно по его `tasks.md`,
 > а не по этому файлу.
+>
+> **2026-11-05:** каталога `love-meetings-pr428-gaps` в этом репозитории нет (`openspec list` и git-история
+> его не знают). Остаток по регулярным созвонам заведён отдельным изменением
+> `openspec/changes/love-recurring-meetings/` — пять групп: планировщик, создание с регулярностью,
+> настройки, правка/удаление во вкладке «Встречи», изменение серии.
 
 > **Изменение `love-meeting-link` поглощено PR #428.** Гостевая ссылка теперь — указатель на серию с
 > `meetingAccess.start`, `linkVersion` и `afterTtl`; перезапуска завершённой встречи нет, сессию создаёт
@@ -237,6 +242,8 @@ PR #428 `FUSIO-1307: Recurrent meetings` — это и есть реализац
 
 ## Где что лежит
 
+- `openspec/changes/love-recurring-meetings/` — остаток по регулярным созвонам: `proposal.md`, `design.md`
+  (состояние кода на 05.11 и открытые решения), `tasks.md` (5 групп), `specs/love-recurring-meetings/spec.md`.
 - `openspec/changes/love-meetings-followups/proposal.md` — зачем и что меняется.
 - `openspec/changes/love-meetings-followups/specs/love-meetings/spec.md` — требования к встречам.
 - `openspec/changes/love-meetings-followups/specs/office-navigator/spec.md` — требования к навигатору.

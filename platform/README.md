@@ -21,6 +21,11 @@
 
 > **Актуальность.** Пункты 1, 4–8 написаны по отчёту о ветке до появления PR #428. Фактическое состояние
 > кода и расхождения с этими документами — в `audit-pr-428.md`; он главнее, если формулировки расходятся.
+>
+> **Остаток по регулярным созвонам (2026-11-05)** — `openspec/changes/love-recurring-meetings/`: пять групп
+> задач по списку владельца (планировщик, создание с регулярностью, настройки, правка/удаление, изменение серии).
+> Изменение `love-meetings-pr428-gaps`, на которое ссылаются `plan.md` и `handoff.md`, в этом репозитории
+> отсутствует — если его нет и у вас, работать нужно по `love-recurring-meetings`.
 
 ## Структура
 
@@ -39,13 +44,18 @@ platform/
     ├── specs/                  основная база требований (наполняется при archive)
     └── changes/
         ├── love-meeting-link/      гостевая ссылка на ветке FUSIO-1307-livekit-shared-link
-        └── love-meetings-followups/
-            ├── proposal.md     зачем и что меняется
-            ├── design.md       как, риски, открытые вопросы
-            ├── tasks.md        чек-лист с проверками
-            └── specs/
-                ├── love-meetings/spec.md
-                └── office-navigator/spec.md
+        ├── love-meetings-followups/
+        │   ├── proposal.md     зачем и что меняется
+        │   ├── design.md       как, риски, открытые вопросы
+        │   ├── tasks.md        чек-лист с проверками
+        │   └── specs/
+        │       ├── love-meetings/spec.md
+        │       └── office-navigator/spec.md
+        └── love-recurring-meetings/   остаток по регулярным созвонам (планировщик, настройки, правка/удаление)
+            ├── proposal.md
+            ├── design.md       состояние кода на 05.11 и открытые решения
+            ├── tasks.md        5 групп по списку владельца
+            └── specs/love-recurring-meetings/spec.md
 ```
 
 ## Команды OpenSpec
