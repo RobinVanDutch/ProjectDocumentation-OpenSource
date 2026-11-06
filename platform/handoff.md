@@ -1,8 +1,123 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
-Состояние на 2026-11-05. Продолжать с этого места.
+Состояние на 2026-11-06. Продолжать с этого места.
+
+## 2026-11-06 (вечер): новый объём — «Постоянные встречи» как полноценная встреча
+
+- Владелец переформулировал раздел «Постоянные встречи» (9 пунктов: одно окно создания/настройки с датой/временем,
+  регулярностью, участниками, напоминанием, паролем и комнатой; гостевая ссылка; таблица с действиями; карточка
+  с отметкой; вкладка «Встречи»; режимы правки «текущая/все будущие»; права удалить/покинуть; группы с DnD).
+- Заведено изменение **`openspec/changes/love-permanent-meetings/`** (валидно, 31 задача, 3 capability:
+  `love-permanent-meetings`, `love-permanent-meetings-groups`, `love-meeting-permissions`).
+- Ключевое решение (design.md, решение 1): модалка создаёт **серию события + `PermanentMeeting`**, связанную через
+  `MeetingEventLink.permanentMeeting` — расписание, вхождения и сессии остаются календарными, а не второй
+  реализацией на `PermanentMeeting`.
+- **Реализация не начата:** ждём подтверждения открытых вопросов из `design.md` (обязательность расписания,
+  плоские группы, «создатель» для старых данных, пароль только на установку).
+
+## 2026-11-06 (день): дата/время в форме и удаление постоянной встречи
+
+- **Дата/время применялись со второго раза.** Причина в календаре: `EventTimeEditor.svelte` получал от `DateEditor`
+  событие `update` с новым значением, но игнорировал `ev.detail` и пересчитывал по устаревшему `startDate`. Теперь
+  `dateChange`/`dueChange` принимают `CustomEvent<number | Date>` и ставят значение из `detail`.
+- **Удаление постоянной встречи.** В модели зарегистрирован override `view.action.Delete` для `PermanentMeeting`
+  (`visibilityTester: view.function.CanDeleteSpace`, режимы `context`+`browser`); для существующих воркспейсов —
+  шаг миграции `permanent-meeting-delete-action` в `models/love/src/migration.ts`. Живые сессии завершает триггер.
+  Дата/время у постоянной встречи не бывает (она открыта всегда); редактируются имя и период `repeatEvery` в панели.
+- Образы пересобраны: `front:latest` и `transactor:latest` (свежие, с `--force`). После рестарта контейнеров
+  `front` и `transactor` на стенде заработают: форма даты/времени, кнопка удаления во вкладке «Постоянные встречи».
+- Спека: `love-recurring-meetings`, добавлены 6.8 и 6.9.
+
+## 2026-11-06 (ночь): ревизия кода, документация
+
+- **Сборка падала на Windows.** `bundle:template` в `services/love/package.json` снова копировал `index.html`
+  через `fs.cpSync` — на Windows тот отдаёт `errno 0` / «The operation completed successfully» на `unlink`
+  занятого файла, и это валило всю цепочку `pnpm docker`. Подключён лежавший в репозитории помощник
+  `common/scripts/copy-file.js` (повторная копия вместо unlink). Проверено: `bundle:template` дважды подряд,
+  затем `docker:build --to @hcengineering/pod-love`, `pod-server`, `pod-front` — все три образа собрались.
+- **Про кэш:** если после правок клиента в логе фазы стоит `(cached)`, собирайте с `--force` — при ручной
+  проверке `pod-front` без `--force` весь бандл взялся из кэша; с `--force` пересобралось 270 пакетов и образ.
+
+- **Ревизия клиентского кода** (не тестов) по двум коммитам — найдено и исправлено четыре артефакта:
+  1. вкладка «Встречи» показывала каждое перенесённое/отменённое вхождение отдельной встречей (календарь зеркалит
+     миксин на все копии с тем же `eventId`); отсечено `baseQuery={{ recurringEventId: { $exists: false } }}`
+     в `Hall.svelte`. По `originalStartTime` фильтровать нельзя — он есть и у мастера серии;
+  2. напоминания: `setInterval` не снимался при повторном `onClient` (после релогина в той же вкладке напоминания
+     дублировались), а запрос тянул все события без нижней границы; теперь один таймер с обновляемой ссылкой
+     на клиент и запрос двумя ветками (серия — по `rules`, событие — по окну `date`);
+  3. `RepeatEveryEditor` не сохранял значение в панели свойств: он зарегистрирован атрибутным редактором, а такому
+     `onChange` не передаётся; теперь без `onChange` пишет сам через `client.diffUpdate`;
+  4. `MeetingData` не инициализировал `isMeeting` из `$state`.
+- Известное и не наше: `TMeetingSchedule.meetingId!` объявлен обязательным и никем не пишется (закрывается
+  бэклог-задачей о booking-пути); в `createMeeting` мёртвый блок `navigateUrl` из апстримного Huly PR #6212.
+- **Документация обновлена:** `docs/love.md` — §2.5 (поля `reminderBefore`/`permanentMeeting`, отмена и удаление,
+  правило «триггер без Trigger-документа не работает»), §2.6 (`repeatEvery`), новые §7a.5 «Напоминания о вхождениях»
+  и §7a.6 «Встреча из планировщика»; `docs/features/office-meetings.md` — путь создания и строка пользовательской
+  документации.
+- Спека: `love-recurring-meetings` **17/28**, валидна; `openspec validate --all --strict` — 4 passed.
+- Сборки: `@hcengineering/love-resources`, `@hcengineering/model-love`, `@hcengineering/model-server-love`,
+  `@hcengineering/server-love-resources` — 0 ошибок; тесты серверного пакета 53/53.
+- **Осталось (за вами):** пересобрать образы `front`, `love` и `transactor` (`pod-server`) и пересоздать контейнеры;
+  ручные проверки 1.4, 4.1, 4.5, а также 5.4 (сдвиг периода у идущей серии).
+
+## 2026-11-06 (вечер): группа 4 сделана в коде, найден мёртвый триггер
+
+- **Баг найден и исправлен:** `OnPermanentMeetingUpdate` (защита владельца постоянной встречи, коммит
+  `a579404650`) никогда не вызывался — функция и ключ в карте триггеров были, а ресурс `serverLove.trigger` и
+  документ `serverCore.class.Trigger` не заводились. Добавлено: ресурс в `server-plugins/love/src/index.ts`,
+  Trigger-документ в `models/server-love/src/index.ts`, миграция `serverLoveOperation`
+  (`models/server-love/src/migration.ts`, состояние `add-permanent-meeting-trigger`), регистрация операции
+  в `models/all/src/migration.ts`. Правило: триггер без Trigger-документа не работает и в старых воркспейсах
+  сам не появится — нужна миграция (как у бейджа карточки).
+- **Отмена одного вхождения завершает его сессию.** Календарь отменяет вхождение заменой на копию
+  с `isCancelled: true` (`deleteRecHandler`, `plugins/calendar-resources/src/index.ts:87`), а не через `exdate`.
+  Поэтому в `OnEventUpdate` добавлены две ветки: `TxCreateDoc` с `isCancelled` в атрибутах и `TxUpdateDoc`
+  с `isCancelled`; сессия ищется по `eventId` + `occurrence` (`originalStartTime`), остальные вхождения не трогаются.
+- **Удаление постоянной встречи завершает её живые сессии** (`TxRemoveDoc` в `OnPermanentMeetingUpdate`,
+  запрос по `meeting`). Общий помощник `finishLiveSessions(control, query)` заменил три копии одного и того же цикла
+  в `server-plugins/love-resources/src/index.ts`.
+- Тесты: `server-plugins/love-resources` — 53/53 (было 46; +4 кейса отмены вхождения, +3 кейса удаления постоянной
+  встречи). Сборки `@hcengineering/model-server-love`, `@hcengineering/server-love-resources` — 0 ошибок.
+- Спека: `love-recurring-meetings` 12/24, валидна. Закрыты 4.2–4.4; открыты ручные проверки (4.1, 4.5),
+  документация (5.5) и пересборка стенда (5.6) — **образ `transactor` нужно пересобрать: триггеры живут в нём**.
+
+## 2026-11-06: спека приведена к коду, остаток по регулярным созвонам — в одном изменении
+
+- Ветка `FUSIO-1307-livekit-shared-link`, HEAD `e2da22dca2`, рабочее дерево чистое кроме `.vscode/settings.json`.
+  Ветка запушена. За два дня сверху PR #428 (`ca12e587e5`) легли два коммита владельца:
+    - `a579404650` «Добавление экранов + создание постоянных встреч» — Storybook-экраны фичи, `copy-file.js` и фикс
+      генератора на Windows, `PermanentMeetingMembersEditor`, `OnPermanentMeetingUpdate` (+9 тестов), `setMeetingLinkId`
+      (+4 теста), режим `/guestInfo` при завершённой сессии постоянной встречи, ассеты `Knock`/`StopRecord`,
+      правки `docs/love.md` и `docs/features/office-meetings.md`;
+    - `e2da22dca2` «Реализация отображения встреч» — модель (`MeetingEventLink.reminderBefore` и `permanentMeeting`,
+      `TPermanentMeeting.repeatEvery`), миграция `addMeetingEventCardBadge`, `period.ts` + тесты, `RepeatEveryEditor`,
+      `MeetingEventBadge` и точка расширения карточки события в `calendar-resources`, клиентские напоминания
+      `meetingReminders.ts`, свои шапки `EditScheduledMeeting`/`EditPermanentMeeting`, «сделать постоянной» в
+      `MeetingData` + создание `PermanentMeeting` в `createMeeting`, вкладка «Постоянные встречи» в `Hall.svelte`,
+      локализация 12 языков, `OnEventUpdate` (завершение сессий при удалении серии, добавление участников в сессию),
+      тест `onEventUpdate.test.ts`.
+- **Спека выровнена с кодом.** Заведено единое `openspec/changes/love-recurring-meetings/` (proposal, design со
+  состоянием кода на 06.11 и открытыми вопросами, tasks — 5 групп по списку владельца, спеки трёх capability).
+  10 из 23 задач закрыто кодом. `openspec validate --all --strict`: 4 passed. Группа 12 из `love-meetings-pr428-gaps`
+  переехала туда же, в самом `pr428-gaps` осталась только справка (28/39). Черновик `love-planner-permanent-meeting`
+  поглощён и перенесён в `openspec/changes/archive/`.
+- **Что разошлось с прежним планом** (и переписано в design.md): связь «серия → постоянная встреча» живёт в
+  `MeetingEventLink.permanentMeeting`, а не в `TMeetingSchedule.meetingId`; `MeetingSchedule.meetingId` теперь нужен
+  только для пути планировщика и пишется фазой `post`; вкладка «Встречи» не смешивает типы — постоянные встречи
+  вынесены в отдельную вкладку `officeView === 'permanent'`; миксин `MeetingEventLink` объявлен на
+  `calendar.class.Event`, поэтому встреча из планировщика должна создаваться как серия событий.
+- **Осталось по коду** (подробно — `love-recurring-meetings/tasks.md`): путь `calendar.class.Schedule`
+  (`MeetingScheduleData`, `createMeetingSchedule`) не умеет ни серию, ни постоянную встречу — это группы 2.1–2.4;
+  ручные проверки правки/удаления во вкладке встреч — 1.4, 4.1, 4.3, 4.4; обратная синхронизация участников — 5.3;
+  решение по показу `repeatEvery` в панели — 3.5; документация — 5.5; пересборка и стенд — 5.6.
+- **Открытые вопросы, требующие ответа владельца:** что именно считается «добавлением встречи в планировщике»
+  (событие через `MeetingData` или запись расписания `Schedule`); что делать с уже открытой сессией при отмене одного
+  вхождения; кто хозяин списка участников у серии, породившей постоянную встречу.
 
 ## 2026-11-05: остаток по регулярным созвонам заведён отдельным изменением
+
+> **Устарело 06.11:** каталог `love-meetings-pr428-gaps` в этой копии есть (28/39 задач), а `love-recurring-meetings`
+> заведено заново и валидно (10/23). Читать как историю.
 
 - **Расхождение в копии:** `openspec/changes/love-meetings-pr428-gaps/` в этом репозитории **отсутствует** —
   `openspec list` показывает только `love-meeting-link` и `love-meetings-followups`, а в git-истории

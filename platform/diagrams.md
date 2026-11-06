@@ -339,3 +339,62 @@ sequenceDiagram
   Note over W,LK: участники, зашедшие позже, переиспользуют эту же встречу<br/>и попадают в ту же комнату
   Note over L,W: /getToken вне окна: владелец встречи (owners)<br/>или владелец workspace переводит Scheduled в Active
 ```
+
+## 12. Создание встречи: два пути и связь между документами (2026-11-06)
+
+Что показывает: какие документы появляются при создании встречи из формы события (реализовано) и из записи
+планировщика (осталось), и кто на кого ссылается после того, как связь переехала в `permanentMeeting`.
+
+```mermaid
+flowchart TD
+  subgraph Event["Форма события — calendar.class.Event (реализовано)"]
+    E1["MeetingData: комната, участники,<br/>сделать постоянной, repeatEvery"] --> E2["createMeeting, фаза post"]
+    E2 --> E3["серия Event + makeRecurring"]
+    E3 --> E4["миксин MeetingEventLink на мастере<br/>linkVersion, meetingAccess, reminderBefore"]
+    E4 --> E5{"переключатель включён?"}
+    E5 -->|да| E6["PermanentMeeting<br/>repeatEvery, members, owners"]
+    E6 --> E7["MeetingEventLink.permanentMeeting = _id"]
+    E5 -->|нет| E8["только серия"]
+  end
+
+  subgraph Planner["Запись планировщика — calendar.class.Schedule (осталось)"]
+    P1["MeetingScheduleData: комната,<br/>участники, промежуток"] --> P2["createMeetingSchedule, фаза post"]
+    P2 --> P3["серия Event + миксин<br/>(тот же код, что у события)"]
+    P2 --> P4["PermanentMeeting"]
+    P4 --> P5["MeetingSchedule.meetingId = _id"]
+  end
+
+  E4 --> T1["Вкладка «Встречи»<br/>SpecialView на миксине"]
+  P3 --> T1
+  E6 --> T2["Вкладка «Постоянные встречи»<br/>SpecialView на PermanentMeeting"]
+  P4 --> T2
+  E4 --> B1["Бейдж входа на карточке<br/>EventCardExtensions"]
+  P3 --> B1
+  B1 --> S["Сессия MeetingMinutes<br/>eventId + occurrence"]
+```
+
+Почему так: миксин `MeetingEventLink` объявлен на `calendar.class.Event`, поэтому запись планировщика сама попасть
+во вкладку «Встречи» не может — путь планировщика обязан создать серию событий. Ссылки две, каждая со своей стороны:
+`MeetingEventLink.permanentMeeting` (серия → постоянная встреча) и `MeetingSchedule.meetingId`
+(запись планировщика → постоянная встреча).
+
+## 13. Правка и удаление регулярной встречи (2026-11-06)
+
+Что показывает: что происходит с сессией при правке участников и при удалении серии.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Серия: создание события или записи планировщика
+  Серия --> ЖиваяСессия: вход в комнату, resolveSession
+  ЖиваяСессия --> ЖиваяСессия: добавлен участник (OnEventUpdate, $push members)
+  ЖиваяСессия --> Завершена: удалён мастер серии (OnEventUpdate, TxRemoveDoc)
+  ЖиваяСессия --> Завершена: встреча окончена в панели
+  Серия --> Серия: правка периода (retimedRules)
+  Серия --> ОтменённоеВхождение: exdate вхождения
+  ОтменённоеВхождение --> [*]
+  Завершена --> [*]
+  note right of ЖиваяСессия
+    удаление копии участником ничего не завершает:
+    мастер - только копия с access = Owner
+  end note
+```
