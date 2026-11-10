@@ -6,107 +6,142 @@
 ## 1. Модель и миграция
 
 - [x] 1.1 `PermanentMeeting`: `reminderBefore?: number` (мс), `group?: Ref<MeetingGroup>`, `order?: number`;
-  `plugins/love/src/types.ts` — те же поля. Проверка: `pnpm build --to @hcengineering/model-love` — 0 ошибок.
+      `plugins/love/src/types.ts` — те же поля. Проверка: `pnpm build --to @hcengineering/model-love` — 0 ошибок.
 - [x] 1.2 Новый класс `MeetingGroup` (`name`, `order`) в `models/love` + карта классов плагина; группы создаются
-  обычным `createDoc` из клиента.
+      обычным `createDoc` из клиента.
 - [x] 1.3 Миграция `models/love/src/migration.ts`: шаг `permanent-meeting-actions-v3` создаёт/правит действия
-  таблицы (Delete, EditPermanentMeetingSettings, EditMeetingSettings); группы — обычные документы, миграции
-  не требуют. Проверка: `pnpm build --to @hcengineering/model-love`.
+      таблицы (Delete, EditPermanentMeetingSettings, EditMeetingSettings); группы — обычные документы, миграции
+      не требуют. Проверка: `pnpm build --to @hcengineering/model-love`.
 
 ## 2. Общая форма создания/настройки
 
 - [x] 2.1 `PermanentMeetingForm.svelte` (новая, используется и созданием, и настройкой): название, дата/время
-  (`EventTimeEditor`), регулярность (`RepeatEveryEditor` → `rules` через `periodRules`), участники
-  (`AccountArrayEditor`), «напомнить за N минут», пароль для гостей, комната (`RoomSelector`).
-  Проверка: `pnpm build --to @hcengineering/love-resources` — 0 ошибок.
+      (`EventTimeEditor`), регулярность (`RepeatEveryEditor` → `rules` через `periodRules`), участники
+      (`AccountArrayEditor`), «напомнить за N минут», пароль для гостей, комната (`RoomSelector`).
+      Проверка: `pnpm build --to @hcengineering/love-resources` — 0 ошибок.
 - [x] 2.2 Валидация: название не пустое (`canSave`), повторное нажатие гасится флагом `saving`.
 - [x] 2.3 Локализация: все новые ключи во всех 12 `plugins/love-assets/lang/*.json` (английский текст как
-  fallback, ru — русский): `MeetingGroup`, `MeetingOrder`, `MergeIntoGroup`, `GroupName`, `MeetingsWithoutGroup`,
-  `CopyMeetingLink`, `MeetingSettings`, `NextOccurrence`, `RemindBeforeMinutes`, `RepeatUntil`, `LinkReady`,
-  `CreateMeetingGroup`. Проверка: ключ присутствует во всех 12 файлах, JSON валиден.
+      fallback, ru — русский): `MeetingGroup`, `MeetingOrder`, `MergeIntoGroup`, `GroupName`, `MeetingsWithoutGroup`,
+      `CopyMeetingLink`, `MeetingSettings`, `NextOccurrence`, `RemindBeforeMinutes`, `RepeatUntil`, `LinkReady`,
+      `CreateMeetingGroup`. Проверка: ключ присутствует во всех 12 файлах, JSON валиден.
 - [x] 2.4 `CreatePermanentMeetingPopup.svelte` — тонкая обёртка над `PermanentMeetingForm` (создание)
-  + id компонента `love.component.PermanentMeetingForm` для открытия формы из действий.
+    - id компонента `love.component.PermanentMeetingForm` для открытия формы из действий.
 
 ## 3. Создание: серия + постоянная встреча + ссылка
 
 - [x] 3.1 `createPermanentMeetingWithSchedule` (`plugins/love-resources/src/utils.ts`): создать `ReccuringEvent`
-  (`rules`, дата/время) или `Event`, если регулярности нет; повесить `MeetingEventLink` (тип/язык/приватность/
-  напоминание из комнаты); создать `PermanentMeeting` и записать `permanentMeeting`; поставить пароль гостей.
-  Проверка: `pnpm build --to @hcengineering/love-resources` — 0 ошибок.
+      (`rules`, дата/время) или `Event`, если регулярности нет; повесить `MeetingEventLink` (тип/язык/приватность/
+      напоминание из комнаты); создать `PermanentMeeting` и записать `permanentMeeting`; поставить пароль гостей.
+      Проверка: `pnpm build --to @hcengineering/love-resources` — 0 ошибок.
 - [x] 3.2 После создания — попап «Ссылка готова» с полем и кнопкой «Копировать»
-  (`MeetingLinkReadyPopup.svelte`, открывается из `CreatePermanentMeetingPopup`). Проверка: ручная проверка на стенде.
+      (`MeetingLinkReadyPopup.svelte`, открывается из `CreatePermanentMeetingPopup`). Проверка: ручная проверка на стенде.
 - [x] 3.3 Unit-тест: `permanentMeetingSchedule.test.ts` — создаются серия и встреча, `permanentMeeting`
-  проставлен в обе стороны, `repeatEvery` = период, `rules` = `periodRules`, `endDate`, пароль. Проверка: пакетные
-  тесты (5/5). Логика вынесена в `src/permanentMeetingSchedule.ts` с контекстом `ScheduleContext` (без
-  svelte/livekit в графе импортов), `utils.ts` больше не держит писателей.
+      проставлен в обе стороны, `repeatEvery` = период, `rules` = `periodRules`, `endDate`, пароль. Проверка: пакетные
+      тесты (5/5). Логика вынесена в `src/permanentMeetingSchedule.ts` с контекстом `ScheduleContext` (без
+      svelte/livekit в графе импортов), `utils.ts` больше не держит писателей.
 
 ## 4. Таблица «Постоянные встречи»
 
 - [x] 4.1 Список «Постоянные встречи» — не таблица, а собственный `PermanentMeetingsList.svelte` (строки:
-  иконка, название, «Копировать ссылку», «Присоединиться», «Настройки»); колонка «следующее вхождение»
-  оставлена открытой (см. 4.7). Причина: `Table` не держит ручной `order` после перезагрузки (требование 7).
+      иконка, название, «Копировать ссылку», «Присоединиться», «Настройки»); колонка «следующее вхождение»
+      оставлена открытой (см. 4.7). Причина: `Table` не держит ручной `order` после перезагрузки (требование 7).
 - [x] 4.2 Копирование гостевой ссылки в строке: `PermanentMeetingPresenter` показывает кнопку рядом с названием
-  (`getEventMeetingLink(_id, 'meeting')` + `copyTextToClipboard`, клик не открывает панель).
+      (`getEventMeetingLink(_id, 'meeting')` + `copyTextToClipboard`, клик не открывает панель).
 - [x] 4.3 Действие «Настройки» (`EditPermanentMeetingSettings`) открывает `PermanentMeetingForm` в режиме правки,
-  видимо участникам (`CanEditPermanentMeeting`). Сохранение идёт путём обновления
-  (`updatePermanentMeetingWithSchedule`: встреча, её серия по `permanentMeeting`, напоминание, пароль), а не
-  создаёт вторую встречу.
+      видимо участникам (`CanEditPermanentMeeting`). Сохранение идёт путём обновления
+      (`updatePermanentMeetingWithSchedule`: встреча, её серия по `permanentMeeting`, напоминание, пароль), а не
+      создаёт вторую встречу.
 - [x] 4.4 Действие «Удалить» — только создателю (`CanDeletePermanentMeeting`: `createdBy`, иначе `owners[0]`);
-  серверный триггер завершает сессии.
+      серверный триггер завершает сессии.
 - [x] 4.5 Гостевая ссылка в строке видна только участнику (`canEditMeeting` в `PermanentMeetingsList`
-  и `PermanentMeetingPresenter`), остальным — только название.
+      и `PermanentMeetingPresenter`), остальным — только название.
 - [x] 4.6 Миграция для действий таблицы: `addPermanentMeetingDeleteAction` в `models/love/src/migration.ts`,
-  состояние переименовано в `permanent-meeting-actions-v2` (чтобы шаг выполнился заново); создаёт `Delete`
-  с `CanDeletePermanentMeeting`, правит `visibilityTester` у существующих действий, создаёт `EditPermanentMeetingSettings`.
+      состояние переименовано в `permanent-meeting-actions-v2` (чтобы шаг выполнился заново); создаёт `Delete`
+      с `CanDeletePermanentMeeting`, правит `visibilityTester` у существующих действий, создаёт `EditPermanentMeetingSettings`.
 - [x] 4.7 Колонка "следующее вхождение": `nextOccurrence` в `period.ts` (старт серии + период),
-  дата берётся из мастера серии (`recurringEventId` отсутствует), формат — `formatDateValue`.
-  Тесты — 4 кейса в `meetingPeriod.test.ts`.
+      дата берётся из мастера серии (`recurringEventId` отсутствует), формат — `formatDateValue`.
+      Тесты — 4 кейса в `meetingPeriod.test.ts`.
 
 ## 5. Карточка и вкладка «Встречи»
 
 - [x] 5.1 Карточка постоянной встречи: в правой панели чекбокс «Постоянная встреча» (`EditPermanentMeeting`),
-  по клику открывается `PermanentMeetingForm` с текущими значениями (`openSettings`).
+      по клику открывается `PermanentMeetingForm` с текущими значениями (`openSettings`).
 - [x] 5.2 Вкладка «Встречи» показывает серии и одиночные; у серии действие `EditMeetingSettings`
-  (target — миксин `MeetingEventLink`, `CanEditMeetingSettings`) и кнопка в карточке открывают тот же
-  `PermanentMeetingForm`; у события без постоянной встречи действие скрыто и остаётся календарный редактор.
+      (target — миксин `MeetingEventLink`, `CanEditMeetingSettings`) и кнопка в карточке открывают тот же
+      `PermanentMeetingForm`; у события без постоянной встречи действие скрыто и остаётся календарный редактор.
 - [x] 5.3 `UpdateRecInstancePopup`: проп `modes`, `updateReccuringInstance` передаёт `['current','all']` —
-  только «Текущая» и «Все (будущие)»; удаление события сохраняет третий вариант.
+      только «Текущая» и «Все (будущие)»; удаление события сохраняет третий вариант.
 
 ## 6. Права
 
 - [x] 6.1 `CanDeletePermanentMeeting`: `createdBy === me`, иначе `owners[0]`; в модели действие `Delete`
-  использует его вместо `CanDeleteSpace`. Проверка: сборка `model-love` — 0 ошибок.
+      использует его вместо `CanDeleteSpace`. Проверка: сборка `model-love` — 0 ошибок.
 - [x] 6.2 `OnPermanentMeetingUpdate`: создатель восстанавливается в `members` (и в `owners`, если правили
-  `owners`) — иначе встречу некому было бы удалить; `owners` тоже защищены, не только `members`.
+      `owners`) — иначе встречу некому было бы удалить; `owners` тоже защищены, не только `members`.
 - [x] 6.3 «Покинуть» скрыто для создателя (существующее `CanLeavePermanentMeeting` проверяет `owners`), видно
-  остальным участникам; не-участнику недоступно.
+      остальным участникам; не-участнику недоступно.
 - [x] 6.4 Unit-тесты: `meetingPermissions.test.ts` (создатель/участник/посторонний) +
-  `onPermanentMeetingUpdate.test.ts` («creator» — три кейса). Проверка: пакетные тесты.
+      `onPermanentMeetingUpdate.test.ts` («creator» — три кейса). Проверка: пакетные тесты.
 
 ## 7. Группы и перетаскивание
 
 - [x] 7.1 Модалка «Объединить в группу» (`MeetingGroupPopup.svelte`: название + отметки встреч) →
-  `createMeetingGroup` из `groups.ts` создаёт `MeetingGroup` и проставляет `group`/`order`.
+      `createMeetingGroup` из `groups.ts` создаёт `MeetingGroup` и проставляет `group`/`order`.
 - [x] 7.2 Список группируется по `group`, шапка группы с названием и переименованием (`renameMeetingGroup`,
-  `EditBox` по кнопке), встречи без группы — в конце отдельной секцией.
+      `EditBox` по кнопке), встречи без группы — в конце отдельной секцией.
 - [x] 7.3 DnD: шапки групп (порядок) и строки встреч (между группами и внутри) через нативный HTML5 drag,
-  сохранение пакетом `persistOrder`.
+      сохранение пакетом `persistOrder`.
 - [x] 7.4 Unit-тест пересчёта `order` (`__tests__/meetingGroups.test.ts`, 7 тестов). Проверка: пакетные тесты.
 
 ## 8. Проверки и документация
 
 - [ ] 8.1 Playwright: пройти сценарий на стенде (создание через модалку → ссылка → таблица → карточка → правка →
-  удаление/выход → группа + DnD), зафиксировать результат. **Блокер:** docker не запущен (`docker info` падает),
-  без пересборки образа на стенде старый UI.
+      удаление/выход → группа + DnD), зафиксировать результат. **Блокер:** docker не запущен (`docker info` падает),
+      без пересборки образа на стенде старый UI.
 - [x] 8.2 Storybook: экраны «Новая постоянная встреча», «Постоянные встречи и группы», «Карточка
-  постоянной встречи» — `dev/design/screens/love-permanent-meetings/` (`_permanent.js` + 01–03), шаги
-  добавлены в существующую запись `FUSIO-1307` с `storybook: Meetings` (отдельная запись с тем же
-  разделом сбрасывает нумерацию страниц и перетирает старые экраны), `generate-screens.mjs` зелёный.
+      постоянной встречи» — `dev/design/screens/love-permanent-meetings/` (`_permanent.js` + 01–03), шаги
+      добавлены в существующую запись `FUSIO-1307` с `storybook: Meetings` (отдельная запись с тем же
+      разделом сбрасывает нумерацию страниц и перетирает старые экраны), `generate-screens.mjs` зелёный.
 - [ ] 8.3 Скриншоты для документации — снять через Playwright со стенда, положить в `docs/images/`.
-  **Блокер:** тот же, нужен поднятый стенд с новым образом.
+      **Блокер:** тот же, нужен поднятый стенд с новым образом.
 - [x] 8.4 `docs/love.md` (§2.6 поля и порядок, §7a.2 разделы офиса, §7a.6 создание из планировщика без
-  пары «серия + постоянная», новый §7a.7 «Окно постоянной встречи, группы и права») и
-  `docs/features/office-meetings.md` (строка пользовательской документации и причина `stale`).
+      пары «серия + постоянная», новый §7a.7 «Окно постоянной встречи, группы и права») и
+      `docs/features/office-meetings.md` (строка пользовательской документации и причина `stale`).
 - [ ] 8.5 Пересборка `front`/`transactor` (`--force`) и проверка на стенде. **Блокер:** docker не запущен;
-  команды готовы: `pnpm docker:build --to @hcengineering/pod-front --force` и `--to @hcengineering/pod-server --force`,
-  затем `docker compose -f dev/docker-compose.yaml up -d front transactor --force-recreate`.
+      команды готовы: `pnpm docker:build --to @hcengineering/pod-front --force` и `--to @hcengineering/pod-server --force`,
+      затем `docker compose -f dev/docker-compose.yaml up -d front transactor --force-recreate`.
+
+## 9. Список этажей и отвязка от комнаты (2026-11-10)
+
+Корректировки владельца от 2026-11-10, выполнены кодом. Изменяют состав требования 2.1: комнаты в окне встречи
+больше нет.
+
+- [x] 9.1 **Этажи — список, сетка — детальный вид.** `FloorsNav.svelte` (новый): этаж — секция `NavGroup`
+      (сворачивание, выбранный этаж, DnD-порядок), комнаты — строки `NavItem` внутри; клик по этажу открывает
+      `/love/<floorId>` (сетка), клик по комнате — её документ. `Hall.svelte` показывает `SelectFloor`, пока этаж
+      не выбран; `officeView` получил состояние `floors`. Проверка: стенд, список офиса.
+- [x] 9.2 **Порядок этажей.** `Floor.order?: number` (модель + типы), `floors.ts` (`reorderFloors`,
+      `persistFloorOrder`), тесты `__tests__/floorOrder.test.ts` (5 кейсов). Проверка: DnD на стенде, значение
+      `order` в базе.
+- [x] 9.3 **Комнаты как в чатах.** Аватар владельца офиса, имена участников второй строкой, счётчик и зелёная
+      точка живого звонка; отступы выровнены по замерам рендера (иконка комнаты под заголовком этажа,
+      зазор иконка↔текст 10px).
+- [x] 9.4 **Плюс создания этажа.** Слот `extra` у `NavGroup` «Этажи» (виден без ховера), роли `Owner`
+      и `Maintainer`; клик не сворачивает секцию.
+- [x] 9.5 **Встреча без комнаты.** Из `PermanentMeetingForm` убран `RoomSelector`, `PermanentMeetingInput.room`
+      удалён; `ScheduleContext.language`, `type: Video`, запись/транскрипция/приватность — дефолты. В календарном
+      пути `createMeeting` больше не требует комнаты, в `MeetingData` вместо `RoomSelector` — подпись
+      `MeetingRunsInServiceRoom` (12 локалей). Проверка: сборка + тесты пакета.
+- [x] 9.6 **Апгрейд воркспейса больше не падает.** `models/notification/src/migration.ts`: guard
+      `hasLegacyCollaborators` для `accounts-to-social-ids-v2` и `migrate-collaborators-v2` — без него модель
+      не доезжала до воркспейса (ошибка `class not found: notification:mixin:Collaborators`).
+
+### Осталось (начать с этого)
+
+- [ ] 9.7 **`ancestors not found: love:class:MeetingGroup`** — в модели воркспейса нет класса `love:class:MeetingGroup`
+      (`9329c65301` его объявляет). Падает `AggregationMiddleware.subscribe`
+      (`plugins/view-resources/src/middleware.ts:80`), из-за чего не открываются «Постоянные встречи» и группы.
+      Копать: висящие `TxUpdateDoc` в `model_tx` воркспейса (не применяются?), состав `models/love` в образах
+      `pod-server`/`pod-workspace`, кто применяет модель при открытии воркспейса (`WS_OPERATION=all+backup`).
+- [ ] 9.8 Ручные проверки: booking-путь (расписание → `PermanentMeeting` → кнопка «Постоянная встреча»),
+      список этажей (сворачивание, DnD, live-точка), форма встречи без комнаты.

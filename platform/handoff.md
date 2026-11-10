@@ -1,6 +1,95 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
-Состояние на 2026-11-06. Продолжать с этого места.
+Состояние на 2026-11-10. Продолжать с этого места.
+
+## 2026-11-10: список этажей, отвязка встречи от комнаты, booking-путь
+
+**Ветка и стенд.** `FUSIO-1307-livekit-shared-link`. Все поды стенда (`front`, `transactor`, `workspace`, `account`)
+пересобраны из ветки с `--force`, версия модели везде `0.8.15` (`common/scripts/version.txt` возвращён к значению ветки).
+Воркспейсы: `test` (старый, его когда-то подняли образы из develop) и `testlove` (создан тулом из ветки:
+`create-workspace testlove huly:cb732a46-4251-47e4-a2d2-6146285d797d`, владелец добавлен `assign-workspace`).
+
+**Корректировки владельца (2026-11-10) — все выполнены в коде:**
+
+1. Сетку этажа оставляем, но она видна только после клика на этаж в списке.
+2. Этажи — список: сворачивание/разворачивание, перестановка местами (DnD), при развороте видны комнаты
+   и участники, оттуда начинаем встречу.
+3. «Повторить логику отображения комнат как в сообщениях» — строки комнат: аватар владельца офиса, название,
+   имена участников, счётчик и зелёная точка живого звонка.
+4. «Группировка по этажам как в документах (книга → страницы)» — этаж = секция `NavGroup`, комнаты внутри неё.
+5. Убрать привязку регулярной/постоянной встречи к комнате: встреча — отдельная сущность, комната больше не
+   выбирается ни в окне постоянной встречи, ни в форме календарного события.
+6. Рядом с заголовком «Этажи» — плюс создания этажа для роли `Owner` (и `Maintainer`), видимый постоянно,
+   а не только по ховеру.
+7. Выровнять отступы иконок и текста в списке (по замерам рендера: заголовок этажа 109px, иконка комнаты была
+   115px при тексте 139px и почти без зазора; теперь иконка комнаты на 109px, зазор до текста 10px).
+8. Починить падение `DocNotifyContextCardHeader`: `objectTitle` у контекста уведомления бывает `undefined`.
+
+**Что сделано в коде:**
+
+| Файл                                                                                               | Что                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `plugins/love/src/types.ts`, `models/love/src/index.ts`                                            | `Floor.order?: number` (ручной порядок этажей); `MeetingSchedule.meetingId?: Ref<PermanentMeeting>` — было обязательным `Ref<MeetingMinutes>` и никем не писалось                                                                          |
+| `plugins/love-resources/src/floors.ts` (новый)                                                     | `reorderFloors` (через `moveItem`) и `persistFloorOrder` (пишет только изменённые этажи)                                                                                                                                                   |
+| `plugins/love-resources/src/__tests__/floorOrder.test.ts` (новый)                                  | 5 кейсов на порядок этажей                                                                                                                                                                                                                 |
+| `plugins/love-resources/src/components/FloorsNav.svelte` (новый)                                   | этажи-секции `NavGroup` (fold, выбранный этаж, DnD), комнаты `NavItem` с аватаром владельца, участниками, счётчиком и live-точкой; клик по этажу → `/love/<floorId>`, клик по комнате → документ комнаты (`selectedRoomPlace` + `openDoc`) |
+| `plugins/love-resources/src/components/OfficeNavigator.svelte`                                     | вместо плоского списка — `<FloorsNav />`; плюс создания этажа в слоте `extra` (рендерится всегда), роли Owner/Maintainer, клик не сворачивает секцию                                                                                       |
+| `plugins/love-resources/src/components/Hall.svelte`                                                | ветка `$officeView === 'floors'` → плейсхолдер `love.string.SelectFloor`; сетка — только детальный вид этажа                                                                                                                               |
+| `plugins/love-resources/src/stores.ts`                                                             | `officeFloors` сортируются по `order` (без order — в конец, по имени); `officeView` получает состояние `floors`                                                                                                                            |
+| `plugins/love-resources/src/permanentMeetingSchedule.ts`, `components/PermanentMeetingForm.svelte` | комната убрана: `ScheduleContext.language`, `PermanentMeetingInput.room` удалён, тип/запись/транскрипция/приватность — дефолты, язык из `getCurrentLanguage()` (`@hcengineering/theme`, не `platform`)                                     |
+| `plugins/love-resources/src/utils.ts`                                                              | `createMeeting` ставит миксин без комнаты; `createMeetingSchedule` создаёт `PermanentMeeting` и пишет его в `MeetingSchedule.meetingId` (серия не создаётся — у `Schedule` нет `eventId`)                                                  |
+| `plugins/love-resources/src/components/MeetingData.svelte`                                         | вместо выбора комнаты — подпись `MeetingRunsInServiceRoom` (ключ добавлен в 12 локалей)                                                                                                                                                    |
+| `plugins/love-resources/src/components/EditMeetingScheduleData.svelte`                             | кнопка «Постоянная встреча» — переход в карточку созданной встречи                                                                                                                                                                         |
+| `models/notification/src/migration.ts`                                                             | guard `hasLegacyCollaborators` (`hierarchy.hasClass`) для `accounts-to-social-ids-v2` и `migrate-collaborators-v2`: апгрейд воркспейса падал на `class not found: notification:mixin:Collaborators` и модель не доезжала                   |
+| `plugins/notification-resources/src/components/DocNotifyContextCardHeader.svelte`                  | null-guard перед `objectTitle.startsWith('#')`                                                                                                                                                                                             |
+
+**Проверки.** `model-love`, `love-resources`, `love-assets`, `model-notification`, `notification-resources` — 0 ошибок;
+jest в `love-resources` — 16 suites / 72 теста. Образы `pod-front`, `pod-server`, `pod-workspace` собраны `--force`.
+
+**Команды за сегодня (просьбы владельца и рабочие шаги):**
+
+- «Сетку давай оставим, но она будет отображаться только при клике на этаж в списке».
+- «Нужно чтобы мы могли отображать этажи в списке, менять их местами, сворачивать-разворачивать и при развороте
+  там отображались все комнаты и участники, с чем мы можем начать встречу».
+- «Отвязываем и не завязываемся от комнаты, это по сути отдельная сущность будет».
+- «Рядом с кнопкой Этажи надо добавить плюсик для роли владельца» + «посмотри какой отступ у иконок и текста
+  и проставь отступы».
+- «Как 1 и 2 пункт выполнишь — делай дальше по плану» → взят booking-путь (задачи 2.3–2.4).
+- «Давай миграцию» → починен апгрейд воркспейса (guard в `models/notification`).
+- Рабочие команды стенда: `pnpm docker:build --to @hcengineering/pod-front --to @hcengineering/pod-server --force`,
+  `up -d front transactor --force-recreate --no-deps`, `docker compose -f dev/docker-compose.yaml restart nginx`
+  (обязательно: nginx кэширует DNS upstream, иначе 502), `pnpm -w bundle --to @hcengineering/tool` +
+  `node ./bundle/bundle.js upgrade-workspace <ws> -f` (окружение — см. `dev/tool/package.json`, плюс
+  `ACCOUNT_DB_NS=global_account`).
+
+**Осталось. НАЧАТЬ С ЭТОГО:**
+
+> **Ошибка, с которой начинать выполнение:**
+> `ancestors not found: love:class:MeetingGroup`
+> (`Hierarchy.getAncestors` → `getAllAttributes` → `AggregationMiddleware.subscribe` в `plugins/view-resources/src/middleware.ts:80`).
+> Значит в модели воркспейса нет класса `love:class:MeetingGroup`, хотя он объявлен в `models/love/src/index.ts`
+> (коммит `9329c65301`). Где копать:
+>
+> 1. `model_tx` воркспейса (`testlove` = `cae72b89-e884-474e-b736-36df073a5bc3`): там 19 висящих `TxUpdateDoc`,
+>    класс `love:class:MeetingGroup` среди них не встречается — проверить, применяются ли модельные транзакции
+>    при открытии воркспейса и кто их применяет (`transactor` vs `workspace`, `WS_OPERATION=all+backup`).
+> 2. Сверить, что `models/love` в образе содержит класс: `TMeetingGroup` в `createModel`-списке, `lib/model.json`
+>    в `pod-server`/`pod-workspace` — и что образы собраны из одной и той же ревизии.
+> 3. После применения модели: раздел «Постоянные встречи», создание встречи, `EditPermanentMeeting` и группы
+>    (`MeetingGroup`) должны открываться без ошибок.
+> 4. Апгрейд воркспейса теперь проходит (`skip accounts migration: no legacy mixin in the model`) — проверить, что
+>    он не «проглатывает» шаг применения модели (у `upgrade-workspace -f` в логе: `load-model`, `pre-migrate`,
+>    `migrate`, `build local model`, `upgrade-workspace done`).
+
+Прочее из остатка:
+
+- Ручная проверка booking-пути на стенде: «Публичное расписание» → сохранение создаёт `PermanentMeeting`,
+  в панели видна кнопка «Постоянная встреча».
+- Ручные проверки из `love-recurring-meetings`: 1.4, 2.1–2.2, 4.1, 4.5, 5.4.
+- Открытые решения: 5.3 (кто хозяин участников серии и постоянной встречи), 3.5 (`repeatEvery` отдельным
+  атрибутом в панели), 2.3–2.4 (booking — код сделан, проверки за владельцем).
+- Документация `docs/love.md` и `docs/features/office-meetings.md` под новые правила (список этажей, встреча без
+  комнаты) не обновлялась — по решению владельца доки пока не трогаем.
 
 ## 2026-11-06 (вечер): новый объём — «Постоянные встречи» как полноценная встреча
 
@@ -39,15 +128,15 @@
   проверке `pod-front` без `--force` весь бандл взялся из кэша; с `--force` пересобралось 270 пакетов и образ.
 
 - **Ревизия клиентского кода** (не тестов) по двум коммитам — найдено и исправлено четыре артефакта:
-  1. вкладка «Встречи» показывала каждое перенесённое/отменённое вхождение отдельной встречей (календарь зеркалит
-     миксин на все копии с тем же `eventId`); отсечено `baseQuery={{ recurringEventId: { $exists: false } }}`
-     в `Hall.svelte`. По `originalStartTime` фильтровать нельзя — он есть и у мастера серии;
-  2. напоминания: `setInterval` не снимался при повторном `onClient` (после релогина в той же вкладке напоминания
-     дублировались), а запрос тянул все события без нижней границы; теперь один таймер с обновляемой ссылкой
-     на клиент и запрос двумя ветками (серия — по `rules`, событие — по окну `date`);
-  3. `RepeatEveryEditor` не сохранял значение в панели свойств: он зарегистрирован атрибутным редактором, а такому
-     `onChange` не передаётся; теперь без `onChange` пишет сам через `client.diffUpdate`;
-  4. `MeetingData` не инициализировал `isMeeting` из `$state`.
+    1. вкладка «Встречи» показывала каждое перенесённое/отменённое вхождение отдельной встречей (календарь зеркалит
+       миксин на все копии с тем же `eventId`); отсечено `baseQuery={{ recurringEventId: { $exists: false } }}`
+       в `Hall.svelte`. По `originalStartTime` фильтровать нельзя — он есть и у мастера серии;
+    2. напоминания: `setInterval` не снимался при повторном `onClient` (после релогина в той же вкладке напоминания
+       дублировались), а запрос тянул все события без нижней границы; теперь один таймер с обновляемой ссылкой
+       на клиент и запрос двумя ветками (серия — по `rules`, событие — по окну `date`);
+    3. `RepeatEveryEditor` не сохранял значение в панели свойств: он зарегистрирован атрибутным редактором, а такому
+       `onChange` не передаётся; теперь без `onChange` пишет сам через `client.diffUpdate`;
+    4. `MeetingData` не инициализировал `isMeeting` из `$state`.
 - Известное и не наше: `TMeetingSchedule.meetingId!` объявлен обязательным и никем не пишется (закрывается
   бэклог-задачей о booking-пути); в `createMeeting` мёртвый блок `navigateUrl` из апстримного Huly PR #6212.
 - **Документация обновлена:** `docs/love.md` — §2.5 (поля `reminderBefore`/`permanentMeeting`, отмена и удаление,
