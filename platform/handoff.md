@@ -1,6 +1,289 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
-Состояние на 2026-11-10. Продолжать с этого места.
+Состояние на 2026-11-11 (вечер). Продолжать с этого места.
+
+## 2026-11-11 (вечер): вкладка «Встречи» — клик открывает карточку встречи
+
+Ветка `FUSIO-1307-livekit-shared-link`, стенд `dev/docker-compose.yaml`, фронт :8087, воркспейс `test`,
+аккаунт `4acd5196-befc-4eb7-893b-815587ab84ca` (второй «Зайцев Андрей», у него 2 встречи; у `41633da8-…` — 14).
+
+**Сделано и проверено на стенде.**
+
+- Клик по встрече в календаре вкладки «Встречи» открывает карточку `EditScheduledMeeting`
+  (кнопки `Edit`, `Join meeting`, чекбокс `Remind before`), а не календарный попап `EditEvent`.
+  Проверено Playwright'ом: `hasEdit=true`, `join=true`, `remindBefore=true`, заголовка «Recurring event» нет.
+- Правка названия в карточке сохраняется в **мастер** события: после `Save` и перезагрузки в БД
+  `event.title = 'Meeting create 3643 edited'`. То есть 9.14 (правки не сохранялись) закрыт: раньше попап писал
+  во вхождение серии.
+- Новый модуль `plugins/calendar-resources/src/eventCard.ts` (+ `__tests__/eventCard.test.ts`, 5 кейсов) и его
+  подключение в `EventElement.svelte` (3-дневный/недельный вид) и `Day.svelte` (месяц). Удалены промежуточные
+  варианты: `openAsDocument.ts`, `cardMixin.ts`, `calendar.metadata.OpenAsDocument` и `setMetadata` в
+  `love-resources/src/index.ts`.
+- Пакет `calendar-resources`: 12/12 тестов, `pnpm run build` чистый; образ `pod-front` собран
+  `pnpm docker:build --to @hcengineering/pod-front --force` (0 ошибок) и развёрнут, `nginx` перезапущен.
+
+**Как это работает (чтобы не искать заново).** Календарь запрашивает `calendar.class.Event` без lookup, поэтому
+у плитки нет поля `love:mixin:MeetingEventLink` — ни `hasMixin`, ни `mixinOrClass` (нужен прокси `$__mixin`) миксин
+не видят. `eventCard(client, event, calendar.component.EditEvent)` поэтому ищет миксин сам: перебирает
+`getAllPossibleMixins(event._class)`, оставляет те, у кого `view.mixin.ObjectEditor` — не календарный редактор,
+и проверяет привязку через `client.findOne(mixin, { _id })` (миксин — документ с id расширяемого дока).
+Для вхождения (`recurringEventId`) мастер читается **через миксин** (`{ eventId, access: Owner }`), чтобы в объекте
+были и поля миксина; открывается `showPopup(editor, { object }, 'content')`.
+
+**Грабли, которые стоили времени (все проверены на практике).**
+
+- `setMetadata(calendar.metadata.OpenAsDocument, …)` из `love-resources` **не работает**: плагин грузится лениво,
+  а `CalendarView.update` строит запрос на монтаже — метаданные приходят после.
+- `hierarchy.as(doc, mixin)` + `openDoc` карточку **не дают**: `getObjectLinkFragment` кладёт в URI только
+  `_class`/`_id`, панель перечитывает документ и снова теряет миксин (открывается «Recurring event»).
+- `EditScheduledMeeting.openEditor` берёт `permanentMeeting` из live-запроса по `master._class` — документ без
+  миксина, поэтому `settings` пуст и кнопка `Edit` уходит в календарный редактор (это и есть незакрытый 9.15).
+- `pnpm docker:build` без `--force` отдаёт закэшированный бандл; браузер к тому же держит старый чанк — перед
+  проверкой Playwright'ом снимать кэш (`Network.setCacheDisabled`) и сверять имя чанка с `dist` в контейнере.
+- `services/love` jest резолвит `@hcengineering/love` из `lib/` — после правок сигнатур сначала `pnpm build --to`.
+
+**Что осталось (по порядку).**
+
+1. **9.15** — `EditScheduledMeeting.svelte`: читать `permanentMeeting`/`reminderBefore` явным запросом
+   `client.findOne(love.mixin.MeetingEventLink, { _id })`, иначе `Edit` в карточке не ведёт в `PermanentMeetingForm`
+   и Repeat (9.13) через карточку не проверить. Тест: у `test1`/`test2` `Edit` → `PermanentMeetingForm` → смена
+   периода → `rules` у серии и `repeatEvery` у встречи. Для события без `permanentMeeting` фолбэк на календарный
+   редактор правильный («Meeting create 3643 edited» — именно такой случай).
+2. **9.16** — создание из вкладки: галочка «Create meeting» в `calendar.component.CreateEvent` по умолчанию выключена,
+   поэтому создаётся событие без миксина (в календаре встреч не видно). Включить по умолчанию на этой вкладке или
+   дать отдельную кнопку «Новая встреча» → `love.component.PermanentMeetingForm`.
+3. **8.3** — скриншоты для `docs/images/` (нужен стенд документации; локально не снимались).
+4. Документация: `docs/love.md` (строки списка: ближайшее вхождение, копирование ссылки, удаление/выход, группы)
+   и `docs/features/love.md` — отметить, что клик по встрече в календаре открывает карточку.
+5. «Покинуть» в списке постоянных встреч руками не проверено — нужен второй аккаунт (не создатель); в CI это 10.2.
+
+## 2026-11-11 (проверка на стенде): модель починена, найдены три UI-дефекта списка
+
+Проверено на стенде Playwright'ом (воркспейс `test`, фронт :8087).
+
+**1. `ancestors not found: love:class:MeetingGroup` — исправлено.** `TMeetingGroup` не был перечислен
+в `builder.createModel(...)`; после правки `pods/server: pnpm run get-model` отдаёт 4 записи
+(`love:class:MeetingGroup`, `_name`, `_order`, `PermanentMeeting_group`). Ошибка в консоли больше
+не воспроизводится. Сборка `model-love` 0 ошибок, jest `models/love` 9/9.
+
+**2. Список «Постоянные встречи» был пуст при живых данных — две причины, обе исправлены.**
+
+- Запросы списка создавались одноразовым `$:` сразу при монтировании. `Hall` монтируется ещё до
+  подключения клиента (вкладка офиса рендерится на экране загрузки), а `LiveQuery`, созданный без
+  `dontDestroy`, в `globalQueries` не попадает и после `setClient` не переподписывается — запрос
+  оставался `pending` навсегда. Теперь запросы идут из `onClient(...)` из `@hcengineering/presentation`.
+- Вторая и главная: `{#each sections() as section}` — Svelte 4 собирает зависимости **по тексту
+  реактивного выражения**, а `sections()` читает `meetings`/`groups`/`series` внутри функции. Такой
+  each не помечается грязным при приходе данных: в консоли `[PML] meetings 4`, в DOM — 0 строк.
+  Теперь view-model считается в реактивном операторе `$: sections = buildSections(groups, meetings,
+  series)`, где все три массива видны компилятору; строки несут `next`, `canCopyLink`, `canDelete`,
+  `canLeave`.
+
+**3. В списке не было удаления и выхода** (ТЗ п. 7–8: удаляет только создатель, остальные выходят).
+Добавлены кнопки в строку: `Delete` (`isPermanentMeetingCreator` + `DeleteConfirmationPopup`,
+живые сессии завершает серверный триггер) и `Leave` (`canLeaveMeeting`, `$pull` из `members`).
+
+**Мелкие правки UI:** `Card` по умолчанию подписывает кнопку «Create» — в попапе ссылки стояла
+неактивная «Create» (добавлены `canSave`/`okLabel`), в окне настроек теперь «Save» вместо «Create».
+
+**Что подтверждено на стенде:** навигатор офиса (Встречи / Постоянные встречи / Этажи), окно
+«Новая встреча» (название, дата/время, период, напоминание, пароль, участники), создание встречи →
+попап «Guest link is ready» со ссылкой, список с 4 встречами, «Объединить в группу» → секция
+«Команда» с двумя встречами (переживает перезагрузку — порядок и группы в БД), карточка встречи
+с галкой «Постоянная встреча», которая открывает то же окно настроек, переименование через
+настройки сразу видно в списке.
+
+**4. Период («Repeat every») не переключался — исправлено.** После выбора `Day` лог показывал
+`[REE] commit 1 day msec 86400000 known 604800000 hasOnChange true`, форма применяла значение
+(`[PMF] changePeriod 86400000`), но следом приходило `[REE] sync from value 604800000 known 86400000` —
+то есть родитель успевал отрендерить ребёнка со **старым** `period`, а `$:`-синхронизация по условию
+`value !== known` сбрасывала единицу обратно в `Week`. Значение залипало навсегда.
+Решение в `RepeatEveryEditor.svelte`: значение, которое редактор сам запросил, помечается `pending`,
+и входящие пропы игнорируются, пока родитель не вернёт ровно это значение (`value === pending`);
+`shown` хранит то, что реально показано, чтобы новые значения из документа всё же доходили.
+Проверено: 8080 и 8087 — `Day → Month → Week`, число `3` даёт `3 Week`, сохранение и повторное
+открытие настроек показывают записанный период (`1 Day` на 8080, `1 Month` на 8087).
+
+**Осталось по спецификации:** п. 8.3 — скриншоты в `docs/images/`; обновить `docs/love.md`
+(строки списка с ближайшим вхождением, копирование ссылки, удаление/выход, группы). «Покинуть» в списке
+ручной проверкой не покрыто — нужен второй аккаунт (не создатель); в CI это задача 10.2 (стенд 8083).
+
+## 2026-11-11: мелкие пункты — язык встречи, инвариант гостя, «мёртвые» поля
+
+- **7.1 (язык)** — делать нечего: `CreatePermanentMeetingPopup.svelte` только хостит окно, язык берётся из
+  интерфейса в `PermanentMeetingForm.save()` (`getCurrentLanguage()`) и уходит в `ScheduleContext.language`.
+  Хардкода `'en'` в попапе и в `permanentMeetingSchedule.ts` нет.
+- **7.2 (гость не получает `after`)** — инвариант держится двумя условиями `handleGuestInfo`: `isOver` не
+  срабатывает для `kind: 'meeting'`, и ветка сессии проверяет `meetingDoc.meeting === undefined` (у сессии
+  постоянной встречи `meeting` всегда задан). Закреплено тестом в `meetingLink.test.ts`: после завершённой сессии
+  лобби отдаёт `live` (форма входа остаётся), `after` не отдаётся. `services/love` 232/232.
+- **8.1–8.3 («мёртвые» поля)** — задачи устарели: `linkId` пишет сервис (`setMeetingLinkId`,
+  `main.ts:548`), `meetingId` у `TMeetingSchedule` пишет booking-путь и читает `EditMeetingScheduleData.svelte`.
+  BREAKING-изменения модели не нужно, `docs/features/love.md` править нечего.
+
+Побочно: в тестовом фейке `resolveSession.test.ts` пришлось научить матчер понимать `$ne` и `$gte`/`$or` — после
+`_class: { $ne: ReccuringInstance }` в `meetingMasterQuery` фейк перестал находить мастер.
+
+## 2026-11-11: владелец постоянной встречи не выпадает из участников (этап 4)
+
+Серверный инвариант уже стоял в `OnPermanentMeetingUpdate` (`server-plugins/love-resources/src/index.ts`):
+недостающих владельцев триггер возвращает и в `owners`, и в `members` через `$push`, отдельно разобраны полная
+перезапись и `$pull` (одиночный id, массив, `$in` — так снимает участника `SpaceMembers`), плюс защищён создатель
+(`createdBy` → аккаунт). Триггер не может отклонить транзакцию, поэтому «правка без владельца отклоняется»
+реализовано ответной правкой — ровно как согласовывали в `love-permanent-meetings` 6.2.
+Проверка: `onPermanentMeetingUpdate.test.ts` — 15 тестов, зелёные.
+
+Добавлено со стороны UI: `withOwners` (`plugins/love-resources/src/permanentMeetingSchedule.ts`), применён в
+`PermanentMeetingForm.membersChanged` — после любой правки списка владельцы возвращаются, поэтому форма не
+показывает ложную картину и не отправляет список без владельца. Проверка: 3 unit-теста (76/76 в пакете), плюс
+живая проверка на 8087: снятие владельца в редакторе участников оставляет «2 members».
+
+**Заведены три новых дефекта от владельца (вкладка «Встречи», задачи 9.13–9.15 в `love-permanent-meetings`):**
+не меняется период повторения при редактировании, не сохраняются название и остальные параметры, не создаются
+встречи. Все три надо воспроизводить под аккаунтом, у которого есть встречи (см. заметку про два аккаунта).
+
+## 2026-11-11: миксин встречи живёт только на мастере серии (этап 3 `love-meetings-followups`)
+
+Дыра: `ReccuringInstance` в календаре того, кто перенёс вхождение, сохраняет `access: 'owner'`, поэтому одной
+проверки `access !== owner` в триггере не хватало. Запись миксина на вхождение давала серии вторую идентичность,
+а поиск мастера по `{ eventId, access: Owner }` мог выбрать это вхождение и сделать его всей серией.
+
+Код:
+- `server-plugins/calendar-resources/src/index.ts` — `onEventMixin` (экспортирована) и `onEventUpdate` отсекают
+  класс `ReccuringInstance`; в `onEventMixin` отброшенная запись пишется в лог
+  (`Meeting identity mixin written to an occurrence, ignored`) с `eventId`/`objectId`/`modifiedBy`.
+- `plugins/love/src/utils.ts` — `meetingMasterQuery` возвращает `_class: { $ne: calendar.class.ReccuringInstance }`.
+
+Проверки: новый `server-plugins/calendar-resources/src/__tests__/eventMixin.test.ts` (3 кейса: копия не получает
+миксин, вхождение не разгоняется по серии + пишется лог, мастер разгоняется), пакет 5/5; `meetingMasterQuery.test.ts`
+обновлён и дополнен, `plugins/love` 50/50; образы `pod-server`/`pod-front`/`pod-love` пересобраны, `transactor`
+пересоздан без ошибок триггеров.
+
+**Важно про стенд (2026-11-11, вечер):** в воркспейсе `test` два аккаунта с одинаковым именем «Зайцев Андрей» —
+`41633da8-…` (14 постоянных встреч) и `4acd5196-…` (2). Сессия 8087 сейчас под вторым, и список показывает только
+его встречи: `PermanentMeeting` — это Space, видимость идёт по `owners`/`members`. Это не регрессия, но при ручных
+проверках надо смотреть, под каким аккаунтом залогинен (смена аккаунта случилась через invite-вход на 8080).
+
+## 2026-11-11: перенос вхождения серии учитывается (2.1-2.4 `love-meetings-pr428-gaps`)
+
+Дефект: пользователь переносит вхождение в календаре, а ссылка открывает его по старому времени;
+отменённое вхождение (`ReccuringInstance` с `isCancelled`) тоже продолжало открываться.
+
+Код:
+- `plugins/love/src/utils.ts` — новый тип `OccurrenceOverride`; `meetingOccurrences(master, from, to, overrides)`
+  (override убирает своё вхождение, перенесённое добавляет новое время, отменённое не добавляет) и
+  `resolveOccurrence(master, now, overrides)`.
+- `services/love/src/workspaceClient.ts` — `occurrenceOverrides(master, now)` читает `calendar.class.ReccuringInstance`
+  по `recurringEventId` системным клиентом, выборка `$or: [{date: {$gte}}, {originalStartTime: {$gte}}]`;
+  используется в `findMeetingTarget` (для `nextOccurrence`/TTL ссылки) и в `resolveSession` (окно входа и `occurrence`).
+
+Проверки: `plugins/love` 49/49 (4 новых кейса: отмена, перенос на часы, на день, отмена+перенос),
+`services/love` 231/231 (отменённое вхождение даёт `no-occurrence` + следующее время, перенесённое открывается
+только в новое время). Образ `pod-love` пересобран и накатан, гостевая ссылка после перезапуска сервиса
+по-прежнему входит (`/guestJoin` 200, подключено). Sanity-сценарий переноса — задача 2.5, нужен стенд 8083.
+
+**Грабли:** `services/love` в jest берёт `@hcengineering/love` из `lib/`, а не из `src` — после правки
+сигнатуры в `plugins/love` нужно `pnpm build --to @hcengineering/love`, иначе старый код молча игнорирует
+новый аргумент и падают тесты сервиса (не модели).
+
+## 2026-11-11: сквозной прогон 8.1 и остаток 9.8 закрыты
+
+Прошёл на 8087 (Playwright, один аккаунт), результаты по шагам:
+
+| Шаг | Результат |
+| --- | --- |
+| Создать встречу с паролем | попап «Guest link is ready» со ссылкой `…/meetings/<shortId>` |
+| Гостевая ссылка | `/guestInfo` → форма с подписанным полем пароля → `/guestJoin` 200 → LiveKit подключён |
+| «Merge into group» | попап «New group» с именем и чекбоксами → группа с 2 встречами |
+| Переименование в настройках | список обновился сразу (`E2E A 7522` → `E2E A renamed`) |
+| DnD строк внутри группы | порядок `B, A`, после перезагрузки сохранился |
+| Удаление строки | `Delete object` → `Yes` → строка исчезла, группа осталась |
+| Этажи: сворачивание | `.hulyNavGroup-content`: 0 → 620 → 0 px |
+| Этажи: создание | плюс в шапке `FLOORS` → «Floor / Add a floor» → второй этаж |
+| Этажи: DnD | шапка `Main` перетащена на `Second` → порядок `Second, Main`, выжил перезагрузку |
+| Live-точка | при живой сессии в комнате `.live` появляется на её строке в навигаторе |
+
+Грабли прогона (пригодятся для 8.3 и 10.2): строки списка — `div[data-id="permanent-meeting-row"]` с
+вложенными кнопками (копировать / присоединиться / удалить), клик по самой строке открывает окно настроек;
+синтетический `dispatchEvent('click')` по вложенной кнопке удаления подтверждение не открывает — нужен
+настоящий клик (`locator.click()`); DnD работает через HTML5 drag, поэтому перетаскивать надо элемент
+`[draggable="true"]` (шапку группы/этажа), а не обёртку.
+
+## 2026-11-11 (гостевой вход): три причины, все исправлены
+
+Владелец: «нельзя подключиться гостю» и «не видно инпута пароля». Воспроизведено на 8087 в отдельном
+контексте браузера. Симптом: форма заполнена, `Join meeting` → «Missing invite information», и в сети
+**ни одного** запроса `/guestJoin`; `guestInfo` отвечал `{"passwordRequired":true,...}` без `meetingId`.
+
+1. **`GuestJoinPopup.join` требовал `meetingId`** (`guestToken == null || meetingId == null`). Для ссылки
+   за паролем `/guestInfo` намеренно не отдаёт ни `meetingId`, ни `mode`, ни название — «nothing leaks
+   before the password is checked». `meetingId` в попапе нужен только как ключ `localStorage`, сервер
+   сам разбирает токен. Guard сведён к `guestToken == null`.
+2. **Постоянная встреча не была «всегда открытой».** `createPermanentMeeting` писал
+   `meetingAccess: defaultMeetingAccess` (`start: 'members'`), а `resolveGuestLink` открывает сессию
+   только при `start: 'link'` — гость обязан был ждать, пока участник запустит встречу. Теперь создание
+   пишет `{ ...defaultMeetingAccess, start: 'link' }`, а upgrade-шаг `permanent-meeting-link-open`
+   проставляет политику уже существующим встречам.
+3. **Комнату LiveKit создавал только `/roomToken`**, то есть участник. Гость получал 404
+   `Meeting room not found`. Добавлен `GuestManager.ensureRoom` — те же metadata/agents, что у `/roomToken`.
+
+Заодно: лобби постоянной встречи без сессии отдаёт `mode: 'live'` вместо `'before'` (иначе гость видел
+«ждём хоста» и не мог войти вообще); поле пароля получило подпись (`data-id="guest-password-row"`);
+шапка лобби больше не печатает `- null`, когда `workspaceUrl` нет.
+
+**Проверено на 8087:** ссылка с паролем → `/guestJoin` 200, `data-id="guest-connected"`, кнопка «Leave room»,
+в комнате AI-агент; ссылка без пароля → форма входа без поля пароля. Тесты: `love-resources` 73/73,
+`services/love` 229/229 (обновлён тест лобби: постоянная встреча без сессии = `mode: 'live'`,
+добавлен тест на `meetingAccess.start === 'link'`).
+
+**Важно про стенд:** LiveKit в `dev/docker-compose.yaml` отсутствует — он поднимается отдельно
+(`dev/run_livekit.sh`, нативный `livekit-server`, порт 7880). Без него `/guestJoin` и `/roomToken` падают
+с `ECONNREFUSED …:7880`, а комната не создаётся. На этой машине бинаря нет, для проверки поднят
+временный контейнер: `docker run -d --name dev-livekit-tmp --network dev_default -p 7880:7880 -p 7881:7881
+-p 7882:7882/udp -v <tmp>/livekit.yaml:/livekit.yaml livekit/livekit-server --config /livekit.yaml`
+(`enable_loopback_candidate: true`, без redis и webhook). Удалить: `docker rm -f dev-livekit-tmp`.
+
+**Грабли стенда (записать в память):**
+
+- `nginx` не стартует без `mail_server`, `mail_client`, `mailpit` (`host not found in upstream
+  "mail_server:8097"`) — весь стенд отдаёт пустой ответ; поднимать их первыми.
+- `upgrade-workspace` принимает **UUID**, а не имя (`workspace test not found` на имени).
+  `-f` обходит сверку версии (`ws-operations.ts:336`), но `model_tx` воркспейса при этом не меняется:
+  на этом стенде модель клиенту и серверу приходит из бандла, `model_tx` хранит только 19 висящих
+  `TxUpdateDoc` (мусор, `load-model` их пропускает).
+- `common/scripts/version.txt` поднят до **0.8.16**: фронт, `pod-server` и `pod-workspace` пересобраны
+  под эту версию, иначе воркспейс встаёт на «Preparing workspace for new version… 0.8.15 => 0.8.16».
+- Навигатор офиса скрывается флагом `localStorage['love-visibleNav']` — пустая левая панель это
+  свёрнутый навигатор, а не баг.
+
+## 2026-11-11: причина `ancestors not found: love:class:MeetingGroup` найдена
+
+Диагноз (не устаревший образ, а код): в `models/love/src/index.ts` класс `TMeetingGroup` объявлен
+(`@Model(love.class.MeetingGroup, ...)`, строка 438), но **не перечислен в `builder.createModel(...)`**
+(строки 500–516). Поэтому в `model.json` создаётся атрибут `love:class:PermanentMeeting_group`
+(он ссылается на класс), а самой транзакции `TxCreateDoc` для класса `love:class:MeetingGroup` нет.
+
+Проверка, на которой это видно (локально, HEAD `c80264e1c3`):
+
+```bash
+cd pods/server && pnpm run get-model
+python - <<'EOF'
+import json, io
+d = json.load(io.open('bundle/model.json', encoding='utf-8'))
+hits = [t for t in d if 'MeetingGroup' in json.dumps(t)]
+print(len(hits), [t['objectId'] for t in hits])
+EOF
+# 1 ['love:class:PermanentMeeting_group']  ← класса нет, атрибут есть
+```
+
+До правки на стенде ошибка воспроизводится в `AggregationMiddleware.subscribe`
+(`plugins/view-resources/src/middleware.ts:80` → `Hierarchy.getAncestors`).
+
+**Правка:** добавить `TMeetingGroup` в список `builder.createModel(...)` в `models/love/src/index.ts`.
+Дальше: `pnpm build --to @hcengineering/model-love`, `pnpm docker:build --to @hcengineering/pod-server
+--to @hcengineering/pod-front --force`, `up -d front transactor --force-recreate --no-deps`, рестарт nginx.
+
+Сверка ТЗ (pasted-версия) с кодом на эту дату — в `## 2026-11-11: сверка ТЗ` ниже (после правки модели).
 
 ## 2026-11-10: список этажей, отвязка встречи от комнаты, booking-путь
 

@@ -19,11 +19,22 @@
 > Группа не в работе: источник перенесённых времён не согласован (`design.md` § Open Questions 1).
 > Остаток работ от неё не зависит, поэтому итерация закрывается без переноса; e2e на перенос едет вместе с ним.
 
-- [ ] 2.1 Проверить, что сервисный аккаунт читает `ReccuringInstance` из `PersonSpace` участников — проверка: пробный запрос из `services/love` возвращает документы override.
-- [ ] 2.2 `meetingOccurrences` (`plugins/love/src/utils.ts`): учитывать override — время вхождения заменяется на перенесённое, `nextOccurrence` считается по новому набору.
-- [ ] 2.3 `findMeetingTarget`/`resolveSession` (`services/love/src/workspaceClient.ts`): окно входа и `occurrence` сессии считаются по набору с учётом переносов.
-- [ ] 2.4 Unit-тесты: перенос на часы, перенос на день, отмена + перенос, перенос без отмены — проверка: `pnpm --filter @hcengineering/love run test`.
-- [ ] 2.5 Sanity: `tests/sanity/tests/love/meetings.recurring.tests.ts` — сценарий переноса вхождения.
+- [x] 2.1 Прочитать override сервисом: `WorkspaceClient.occurrenceOverrides(master, now)` (`services/love/src/workspaceClient.ts`)
+      читает `calendar.class.ReccuringInstance` по `recurringEventId` системым клиентом (пространство участника не мешает),
+      ограничивая выборку `$or: [{date: {$gte}}, {originalStartTime: {$gte}}]` — перенесённое вхождение может оставить
+      будущий `originalStartTime`, а отменённое имеет `date` = исходному времени. Ошибка чтения не валит вход: лог + пустой список.
+      Живая проверка «сервис видит override в реальном воркспейсе» перенесена в 2.5 (нужен календарный сценарий с переносом).
+- [x] 2.2 `meetingOccurrences` / `resolveOccurrence` (`plugins/love/src/utils.ts`) принимают `OccurrenceOverride[]`:
+      вхождение с override убирается из набора, у перенесённого добавляется новое время (оно может попасть в окно,
+      хотя исходного там нет), отменённое (`isCancelled`) не добавляется вовсе. `exdate` продолжает работать как раньше.
+- [x] 2.3 `findMeetingTarget` и `resolveSession` (`services/love/src/workspaceClient.ts`) считают окно входа и `occurrence`
+      сессии по набору с учётом override: ссылка вне окна отдаёт `nextOccurrence` по новому времени, отменённое вхождение
+      не открывается, перенесённое открывается только в новое время.
+- [x] 2.4 Unit-тесты: `plugins/love/src/__tests__/resolveOccurrence.test.ts` — 4 кейса (отмена, перенос на часы,
+      перенос на день, отмена+перенос), 49/49 пакета; `services/love/src/__tests__/resolveSession.test.ts` — отменённое
+      вхождение даёт `no-occurrence` со следующим временем, перенесённое открывается только в новое, 231/231 пакета.
+- [ ] 2.5 Sanity: `tests/sanity/tests/love/meetings.recurring.tests.ts` — сценарий переноса вхождения
+      (и живая проверка чтения override в реальном воркспейсе). **Блокер:** нужен стенд 8083 (см. 10.2).
 
 ## 3. Владелец постоянной встречи (P1)
 
