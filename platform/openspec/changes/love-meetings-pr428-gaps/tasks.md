@@ -34,13 +34,16 @@
       перенос на день, отмена+перенос), 49/49 пакета; `services/love/src/__tests__/resolveSession.test.ts` — отменённое
       вхождение даёт `no-occurrence` со следующим временем, перенесённое открывается только в новое, 231/231 пакета.
 - [ ] 2.5 Sanity: `tests/sanity/tests/love/meetings.recurring.tests.ts` — сценарий переноса вхождения
+      **2026-11-12: перенесено в `love-meetings-corrections` 4.4 и 4.8** (там же требование «вход на закрытом окне —
+      текст, а не runtime-ошибка»). Отдельно отмечено: на Postgres перенос вхождения сейчас даёт 403 из-за `$or`
+      в `occurrenceOverrides` — сначала `love-meetings-corrections` 2.1.
       (и живая проверка чтения override в реальном воркспейсе). **Блокер:** нужен стенд 8083 (см. 10.2).
 
 ## 3. Владелец постоянной встречи (P1)
 
 - [x] 3.1 `server-plugins/love-resources` `OnPermanentMeetingUpdate`: правка `members` постоянной встречи без владельца исправляется обратно (`$push` отсутствующих `owners`), в лог пишется предупреждение — триггер не может отклонить транзакцию, поэтому инвариант держится ответной правкой. **Исправлено 03.11:** проверяются обе формы правки — полная перезапись `members` и `$pull` (одиночный id, массив, `{$in}`), потому что `SpaceMembers` снимает участника именно через `$pull` и раньше проходил мимо защиты; проверка: `get_errors` чистый.
 - [x] 3.2 UI постоянной встречи: участников правит свой редактор `PermanentMeetingMembersEditor` (`plugins/love-resources`), поставленный через `createAttributePresenter` на `love.class.PermanentMeeting, 'members', 'array'`: владельцы в `protectedAccounts` (снять нельзя), список доступен только владельцу. Общий `SpaceMembersEditor` из `contact-resources` не тронут — он общий для каналов и воронок.
-  **Исправлено 03.11:** `createAttributePresenter` действует на весь класс, поэтому тот же редактор вызывался ячейкой таблицы `Table.svelte` без `object` — падало `Cannot read properties of undefined (reading 'owners')`. Теперь `object` необязателен: без документа редактор ведёт себя как общий (без защиты), с документом — защищает владельца; проверка: `get_errors` чистый, `pnpm build --to @hcengineering/love-resources` — 0 ошибок.
+      **Исправлено 03.11:** `createAttributePresenter` действует на весь класс, поэтому тот же редактор вызывался ячейкой таблицы `Table.svelte` без `object` — падало `Cannot read properties of undefined (reading 'owners')`. Теперь `object` необязателен: без документа редактор ведёт себя как общий (без защиты), с документом — защищает владельца; проверка: `get_errors` чистый, `pnpm build --to @hcengineering/love-resources` — 0 ошибок.
 - [x] 3.3 Unit-тест триггера: `server-plugins/love-resources/src/__tests__/onPermanentMeetingUpdate.test.ts` — 9 кейсов (владелец возвращается, оба владельца, правка с владельцем не трогается, `$pull` одного владельца, `$pull` с `$in`, `$pull` без владельца, переименование, чужой класс и не-update, документа нет) — проверка: прогон зелёный (9/9).
 
 ## 4. Режимы гостя постоянной встречи (P1)

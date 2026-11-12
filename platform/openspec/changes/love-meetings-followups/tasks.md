@@ -21,8 +21,11 @@
 ## 2. Этап 1: вхождения серии — отмена и перенос
 
 - [ ] 2.1 Проверить, что переопределения вхождения читаются сервисным аккаунтом из `PersonSpace` участников: запрос `ReccuringInstance { recurringEventId }` в love-сервисе на тестовом стенде — проверка: запрос возвращает отменённое и перенесённое вхождения; если политика не пускает, зафиксировать это и перейти к 2.2 через сервисный RPC.
-- [ ] 2.2 Расширить `meetingOccurrences` (`plugins/love/src/utils.ts`): вычитать вхождения с `isCancelled`, подменять расчётное время на `originalStartTime` перенесённого вхождения — проверка: unit-тест в `plugins/love/src/__tests__` на «отменено», «перенесено на день», «перенесено на два часа», «exdate + перенос».
-- [ ] 2.3 Учесть это в `resolveOccurrence` и в расчёте `nextOccurrence` (`services/love/src/workspaceClient.ts`) — проверка: unit-тест `resolveOccurrence`: отменённое текущее вхождение даёт `no-occurrence` с следующим действительным вхождением; перенесённое открывается в новое время.
+      **2026-11-12: проверено на Postgres — НЕ читаются**, но не из-за прав: `$or` в запросе не поддерживается
+      Postgres-адаптером (`operator does not exist: text = text[]`, лог transactor). Исправление —
+      `love-meetings-corrections` 2.1.
+- [x] 2.2 Расширить `meetingOccurrences` (`plugins/love/src/utils.ts`): вычитать вхождения с `isCancelled`, подменять расчётное время на `originalStartTime` перенесённого вхождения — проверка: unit-тест в `plugins/love/src/__tests__` на «отменено», «перенесено на день», «перенесено на два часа», «exdate + перенос». **Сделано 2026-11-11** (`resolveOccurrence.test.ts` 17 кейсов, включая «`rules: []` — не серия»).
+- [x] 2.3 Учесть это в `resolveOccurrence` и в расчёте `nextOccurrence` (`services/love/src/workspaceClient.ts`) — проверка: unit-тест `resolveOccurrence`: отменённое текущее вхождение даёт `no-occurrence` с следующим действительным вхождением; перенесённое открывается в новое время. **Сделано 2026-11-11** (`resolveSession.test.ts`), осталось чтение исключений на Postgres — см. 2.1.
 - [ ] 2.4 API-sanity на новое поведение: `tests/sanity/tests/love/meetings.recurring.tests.ts` — отменённое вхождение не открывает сессию и отдаёт `nextOccurrence`; перенесённое открывает сессию с `occurrence = originalStartTime` — проверка: тесты зелёные на стенде из 1.1.
 
 ## 3. Этап 2: миксин только на мастере
@@ -38,7 +41,7 @@
       выбрать перенесённое вхождение и сделать одно вхождение идентичностью всей серии. Проверка:
       `meetingMasterQuery.test.ts` — ожидания обновлены, добавлен кейс «никогда не резолвится во вхождение», 50/50.
 - [x] 3.3 Отброшенная запись миксина пишется в лог `control.ctx.warn('Meeting identity mixin written to an occurrence,
-      ignored', { eventId, objectId, modifiedBy })` — транзакция просто не распространяется, старые документы не падают.
+    ignored', { eventId, objectId, modifiedBy })` — транзакция просто не распространяется, старые документы не падают.
       Проверка: тест `eventMixin.test.ts` ждёт вызова `ctx.warn`; образ `pod-server` пересобран, `transactor`
       пересоздан, в логе transactor нет ошибок триггеров.
 
@@ -59,6 +62,8 @@
 ## 5. Этап 4: навигатор офиса — доводка
 
 - [ ] 5.1 Не сбрасывать сегмент при открытии документа: `navigateToOfficeDoc` (`plugins/love-resources/src/utils.ts`) и `backOrOpen` (`RoomPopup.svelte`) не режут путь до `length = 3` — проверка: сценарий «в звонке открыл протокол → назад»: пункт навигатора остаётся выбранным, адрес сохраняет сегмент.
+      **Код готов 2026-11-03** (`love-meetings-pr428-gaps` 5.1); осталась ручная проверка на стенде — перенесена в
+      `love-meetings-corrections` 5.3.
 - [x] 5.2 Дубль кнопок в шапке раздела протоколов убран в двух местах: `MeetingMinutesSection.svelte` (документ
       встречи) и `RoomMeetingsFooter.svelte` (документ комнаты — именно там дубль виден на стенде).
       Причина: `ViewletsSettingButton` сам рисует ОБЕ кнопки (`ViewOptionsButton` = «Group & sort» + `IconButton`

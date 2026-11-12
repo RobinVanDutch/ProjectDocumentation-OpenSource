@@ -1,5 +1,9 @@
 # Tasks
 
+> **Актуально на 2026-11-12:** открытые дефекты и обязательное покрытие тестами вынесены в изменение
+> `love-meetings-corrections` (там же блок «ПРОЧИТАТЬ СРАЗУ ЖЕ ПЕРЕД ВЫПОЛНЕНИЕМ»). Пункты 9.5, 9.15, 9.16 ниже
+> сверены с ним: 9.5 частично отменён (комната вернулась в календарный путь), 9.15/9.16 — открыты.
+
 Порядок — по зависимостям. Сборку, прогоны и Playwright-проверку делаем после каждого блока; статус отмечается
 здесь же (правило spec-first).
 
@@ -117,10 +121,10 @@
       пары «серия + постоянная», новый §7a.7 «Окно постоянной встречи, группы и права») и
       `docs/features/office-meetings.md` (строка пользовательской документации и причина `stale`).
 - [~] 8.5 Пересборка `front`/`transactor` (`--force`) и проверка на стенде.
-      Сделано 2026-11-11: `pnpm docker:build --to @hcengineering/pod-front --force` (261 с, 270 пакетов, 0 ошибок),
-      `docker compose -f dev/docker-compose.yaml up -d front --force-recreate --no-deps` + `restart nginx`;
-      стенд 8087 проверен Playwright'ом (список, настройки, период). Осталось: `--to @hcengineering/pod-server --force`
-      (серверные триггеры и модель после фикса `MeetingGroup`) и пересоздание `transactor`.
+  Сделано 2026-11-11: `pnpm docker:build --to @hcengineering/pod-front --force` (261 с, 270 пакетов, 0 ошибок),
+  `docker compose -f dev/docker-compose.yaml up -d front --force-recreate --no-deps` + `restart nginx`;
+  стенд 8087 проверен Playwright'ом (список, настройки, период). Осталось: `--to @hcengineering/pod-server --force`
+  (серверные триггеры и модель после фикса `MeetingGroup`) и пересоздание `transactor`.
 
 ## 9. Список этажей и отвязка от комнаты (2026-11-10)
 
@@ -143,6 +147,9 @@
       удалён; `ScheduleContext.language`, `type: Video`, запись/транскрипция/приватность — дефолты. В календарном
       пути `createMeeting` больше не требует комнаты, в `MeetingData` вместо `RoomSelector` — подпись
       `MeetingRunsInServiceRoom` (12 локалей). Проверка: сборка + тесты пакета.
+      **Отменено частично 2026-11-12 (владелец):** выбор комнаты вернулся в календарный путь — `RoomSelector` снова
+      в `MeetingData` (общая форма планировщика и вкладки «Встречи»), комната пишется в миксин
+      `MeetingEventLink.room` и используется сервисом при создании сессии. См. `love-meetings-corrections` 0.1.
 - [x] 9.6 **Апгрейд воркспейса больше не падает.** `models/notification/src/migration.ts`: guard
       `hasLegacyCollaborators` для `accounts-to-social-ids-v2` и `migrate-collaborators-v2` — без него модель
       не доезжала до воркспейса (ошибка `class not found: notification:mixin:Collaborators`).
@@ -184,26 +191,23 @@
 не открывалась вообще, потому что события в календаре приходят без миксина. Подробности и три слоя проблемы — в 9.13.
 
 - [x] 9.13 **Не меняется период повторения: правка уходила во вхождение, а попап открывался вместо карточки.**
-      Найдено три слоя, все сняты:
-      1. `CalendarView.update` запрашивает `calendar.class.Event` **без lookup**, поэтому у плитки нет поля
-         `love:mixin:MeetingEventLink`; `Hierarchy.hasMixin` не находит миксин, а `Hierarchy.mixinOrClass` (ему нужен
-         mixin-прокси `$__mixin`) отдаёт базовый класс. Регистрация списка миксинов через `setMetadata` из
-         `love-resources` не помогает: плагин грузится лениво, запрос календаря к этому моменту уже построен.
-      2. `openDoc` + `hierarchy.as(doc, mixin)` карточку тоже не дают: URI панели помнит только `_class`/`_id`,
-         панель перечитывает документ и снова теряет миксин → открывался «Recurring event» (календарный редактор).
-      3. Рабочее решение — `plugins/calendar-resources/src/eventCard.ts`: возвращает **редактор карточки + документ**.
-         Миксин ищется явно (на объекте, иначе одним запросом на кандидата: `client.findOne(mixin, { _id })` — миксин
-         хранится документом с id расширяемого дока), для серии берётся мастер запросом **через миксин**
-         (`{ eventId, access: Owner }`), затем `showPopup(editor, { object }, 'content')`, где `editor` —
-         `view.mixin.ObjectEditor` найденного миксина (`love.component.EditScheduledMeeting`).
-         Подключено в `EventElement.svelte` (3-дневный/недельный вид — именно он в «Встречах») и `Day.svelte` (месяц).
+      Найдено три слоя, все сняты: 1. `CalendarView.update` запрашивает `calendar.class.Event` **без lookup**, поэтому у плитки нет поля
+      `love:mixin:MeetingEventLink`; `Hierarchy.hasMixin` не находит миксин, а `Hierarchy.mixinOrClass` (ему нужен
+      mixin-прокси `$__mixin`) отдаёт базовый класс. Регистрация списка миксинов через `setMetadata` из
+      `love-resources` не помогает: плагин грузится лениво, запрос календаря к этому моменту уже построен. 2. `openDoc` + `hierarchy.as(doc, mixin)` карточку тоже не дают: URI панели помнит только `_class`/`_id`,
+      панель перечитывает документ и снова теряет миксин → открывался «Recurring event» (календарный редактор). 3. Рабочее решение — `plugins/calendar-resources/src/eventCard.ts`: возвращает **редактор карточки + документ**.
+      Миксин ищется явно (на объекте, иначе одним запросом на кандидата: `client.findOne(mixin, { _id })` — миксин
+      хранится документом с id расширяемого дока), для серии берётся мастер запросом **через миксин**
+      (`{ eventId, access: Owner }`), затем `showPopup(editor, { object }, 'content')`, где `editor` —
+      `view.mixin.ObjectEditor` найденного миксина (`love.component.EditScheduledMeeting`).
+      Подключено в `EventElement.svelte` (3-дневный/недельный вид — именно он в «Встречах») и `Day.svelte` (месяц).
       Проверено на 8087: клик по плитке открывает карточку с `Edit`, `Join meeting`, `Remind before`, без заголовка
       «Recurring event» и без календарного попапа. Unit: `eventCard.test.ts` (5 кейсов), пакет `calendar-resources` 12/12,
       `pnpm build --to @hcengineering/pod-front --force` — 0 ошибок.
 - [x] 9.14 **Название и параметры сохраняются в мастер.** На стенде: правка названия в карточке → `Save` →
       перезагрузка → в БД у мастера `event` новый `title` (`Meeting create 3643 edited`). Так как открывается мастер
       серии, правка больше не уходит во вхождение; отсев `ReccuringInstance` в `onEventUpdate` её не трогает.
-- [ ] 9.15 **«Редактировать» в карточке серийной встречи ведёт в календарный редактор вместо настроек встречи.**
+- [ ] 9.15 **(2026-11-12: не закрыто, причина подтверждена)** **«Редактировать» в карточке серийной встречи ведёт в календарный редактор вместо настроек встречи.**
       `EditScheduledMeeting.openEditor` берёт `permanentMeeting` из `live` (`query.query(master._class, { _id })`),
       а этот документ приходит **без миксина** → `settings === undefined` → фолбэк на `calendar.component.EditEvent`.
       Поэтому Repeat через карточку пока недоступен (сам `RepeatEveryEditor` в `PermanentMeetingForm` рабочий — 9.10).
@@ -212,14 +216,15 @@
       либо получать миксин-прокси от календаря. Проверка: у `test1`/`test2` (у них `permanentMeeting` есть) `Edit`
       открывает `PermanentMeetingForm`, смена периода сохраняется (`rules` у серии, `repeatEvery` у встречи).
       Для события без `permanentMeeting` («Meeting create 3643 edited») фолбэк на календарный редактор — **правильно**.
-- [ ] 9.16 **Создание встречи из вкладки «Встречи».** Кнопка есть (`Events.svelte`, `createComponent =
-      calendar.component.CreateEvent`), но галочка «Create meeting» в попапе по умолчанию **выключена**, поэтому
+- [ ] 9.16 **(2026-11-12: не закрыто)** **Создание встречи из вкладки «Встречи».** Кнопка есть (`Events.svelte`, `createComponent =
+    calendar.component.CreateEvent`), но галочка «Create meeting» в попапе по умолчанию **выключена**, поэтому
       создаётся обычное событие без миксина и в календаре встреч оно не появляется. Варианты: включить галочку по
       умолчанию для этой вкладки или повесить отдельную кнопку «Новая встреча» → `love.component.PermanentMeetingForm`.
       Проверка: создание из вкладки даёт событие с миксином (видно в календаре) и строку в «Постоянных встречах»,
       если переключатель включён.
 
 ### Дефекты гостевого входа (2026-11-11, от владельца)
+
 Оба — P0: без них гостевая ссылка, ради которой делалось изменение, не работает.
 
 - [x] 9.11 **Гость не может подключиться по ссылке.** Причины (три, все исправлены):
