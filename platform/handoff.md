@@ -1,6 +1,341 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
-Состояние на 2026-11-12. Продолжать с этого места.
+Состояние на 2026-11-14 (вечер). Продолжать с этого места; задачи — в
+`openspec/changes/love-office-and-calendar-ui/tasks.md`.
+
+## 2026-11-14 (итог сессии): где остановились
+
+**Работаем в:** платформа `c:\Users\Андрей\Desktop\project\platform\platform`, ветка без коммитов (всё в
+рабочем дереве, коммитит владелец). Стенд: compose :8087 + dev-server :8080, вход OTP из mailpit,
+воркспейс `test`, аккаунт `cisarup@ogzmail.com`.
+
+**Сделано и проверено на стенде:**
+
+1. **Офис с владельцем.** `AddRoomPopup.svelte` — после «Office» шаг выбора сотрудника
+   (`[data-id="office-owner-step"]`, `AssigneeBox` на `contact.mixin.Employee`), выбранный пишется в
+   `Data<Office>.person`. Раньше офис создавался с `person: null`.
+2. **Выбор владельца в конфигурации этажа.** `RoomConfigure.svelte` — `_class` исправлен с
+   `contact.class.Person` на `contact.mixin.Employee`: фильтр идёт по `active`, а это поле миксина Employee,
+   поэтому список был пуст.
+3. **Переименование этажа.** `FloorsNav.svelte` — кнопка «Rename a floor» в заголовке этажа
+   (`EditFloorPopup` с `id`), Owner/Maintainer. Проверено: «Second» → «Second X» → «Second».
+4. **Попап добавления комнаты.** Убран `flex-direction: row`, варианты — список строк, попап
+   `min-width: 20rem`, шаг владельца — колонка с футером `flex-end; gap: 8px`; поле выбора 294×32.
+5. **Правка вхождения серии.** `plugins/calendar-resources/src/utils.ts` → `updateReccuringInstance`:
+   `UpdateRecInstancePopup` на сохранении не показывается, изменение уходит в мастер, даты считаются сдвигом
+   от мастера. Тест `updateReccuringInstance.test.ts` (4 кейса).
+6. **Карточка события в календаре** — штатный `EditEvent` модально (`'center'`) в `EventElement.svelte` и
+   `Day.svelte`; `'content'` не даёт закрытия кликом вне (overlay включается в `fitPopupElement`).
+7. **Блок «Meeting» в `EditEvent`** (`EditMeetingData.svelte`) — kit-кнопки, один `gap`, правая группа
+   `flex-shrink: 0`.
+8. **Сетка календаря.** `.now-line` в `DayCalendar.svelte` больше не вылезает за последнюю колонку
+   (было `left: 3rem` + `width: 100%` → горизонтальный скролл).
+9. **Список постоянных встреч.** Строка 40px, шапка группы 32px, счётчик встреч убран, порядок действий
+   Secondary → Primary; `EditScheduledMeeting` — заголовок `EditBox`, кнопки одного размера.
+
+**На чём остановились (первое дело в понедельник):**
+
+- **Вид поля выбора сотрудника в карточке офиса не принят владельцем.** Сейчас `EditRoom.svelte` рисует
+  `AssigneeBox` (`kind="regular"`, 320×32) под названием офиса — владелец сказал «что за залупу сделал».
+  Нужно согласовать вид (поле в шапке карточки против свойства `Employee` в правой панели) и переделать.
+  Не начинать заново «как лучше» — спросить один раз и сделать по ответу.
+- Не проверено сохранение: смена владельца офиса из карточки и из конфигурации этажа реально пишет
+  `Office.person` (в БД) и обновляет навигатор.
+- Кнопка «Edit office» (`Floor.svelte`) не срабатывала обычным кликом в Playwright (сработал
+  `dispatchEvent`) — проверить, не перехватывает ли клик обёртка `Header`.
+- Тесты (компонентные + Playwright-sanity на офис/этажи/серию) и документация — не сделаны.
+- Смена `excluded` в шаге создания: фильтр «не предлагать занятых» добавлен и убран — при пустом списке
+  офис создать нельзя, а модель второй офис одного человека не запрещает.
+
+**Грабли этой сессии:** клики по навигатору офиса в Playwright не проходят обычным `click()` — работает
+`element.dispatchEvent(new MouseEvent('click', { bubbles: true }))`; попап «Add room» открывается у кнопки и
+перекрывает сетку, поэтому перед замерами его надо закрывать (`Escape`).
+
+## 2026-11-14: обход вёрстки сетки календаря
+
+**Найдено и исправлено**
+
+- `plugins/calendar-resources/src/components/DayCalendar.svelte`, `.now-line` — у линии «сейчас» были
+  одновременно `left: 3rem` и `width: 100%`. `width` считается от левого края грида, а не от `left`,
+  поэтому линия выходила на 48px за последнюю колонку и давала гриду горизонтальный скролл
+  (`scrollWidth 1102` при `clientWidth 1054`); правый край последней колонки при этом обрезался.
+  Теперь линия растянута только `left`/`right`; `scrollWidth === clientWidth`, элементы не выходят
+  за границы.
+
+**Проверено (замеры в браузере, не на глаз)**
+
+- Виды `3 days`, `Week`, `Month`: колонки и шапки совпадают по `left`/`width` 1:1, ячейки
+  (`empty-cell`/`cell`) точно равны колонкам грида, переполнений нет.
+- Ширины окна 1024 / 1280 / 1390(старт) / 1920: колонки пересчитываются (273 / 380 / 309–333 / 646),
+  шапки и ячейки остаются совмещёнными, `scrollWidth === clientWidth`.
+- Модалка `EditEvent` (400×701), карточка комнаты (`EditRoom`), список `Permanent meetings` — без
+  элементов, выходящих за контейнер.
+
+**Открыто:** у владельца «съехало много где» — по замерам на стенде :8080 осталось не найдено ничего,
+кроме `.now-line`. Нужен экран или вид, где расхождение видно.
+
+## 2026-11-14: выравнивание карточек и списков по библиотеке экранов
+
+Эталон брался из `dev/design/screens/love-permanent-meetings/_permanent.js` (библиотека компонентов
+экранов, она же `Screens` в Storybook), а не на глаз.
+
+- `PermanentMeetingsList.svelte` — строка встречи `2.5rem` (40px), `padding: 0 0.75rem`, `gap 0.5rem`,
+  `radius 0.375rem` (было `0.375rem 0.5rem` и авто-высота, из-за которой строка с меньшим числом действий
+  была ниже соседей); шапка группы `2rem` (32px), `padding: 0 0.5rem`; добавлен счётчик встреч в шапке
+  группы (`.group-count`, как `Count` в библиотеке); `.actions` — `gap: 0`, кнопки прижаты от правого
+  края своими паддингами (правые края строк теперь на одной линии: 1321 при контейнере 1333 и паддинге 12).
+- `Hall.svelte` — порядок действий как в библиотеке: `Merge into group` (secondary) первым, `New meeting`
+  (primary) последним.
+- `EditScheduledMeeting.svelte` — заголовок стал `EditBox` (`disabled`), как у карточек комнаты
+  (`EditRoom`) и сессии (`EditMeetingMinutes`); все кнопки строки `size="large"` (кнопка `Edit` была
+  `small` и выбивалась из строки), `Leave room` — `kind="negative"`, как в тех же карточках; убран
+  мёртвый стиль `.title`.
+
+**Проверено на :8080 (замеры DOM):** строки списка 40px, шапки групп 32px, центры иконки/кнопок/строки
+совпадают (140/140/140, 184/184/184); группы показывают счётчик (2, 5, 2); кнопки шапки 40px в порядке
+secondary → primary. `love-resources` 87/87.
+
+**Не трогал (по договорённости — только вёрстка):** логику доступа (`canEdit`/`canDelete`), набор иконок
+действий, поведение кликов.
+
+## 2026-11-14 (продолжение): модалка события и счётчик групп
+
+- `EditMeetingData.svelte` (блок «Meeting / комната / Start meeting» внутри `EditEvent`) — ручные
+  `mr-2`/`ml-3` заменены одним `gap: 0.5rem`; кнопка переведена с legacy `Button` из
+  `@hcengineering/ui` на `Button` из `@hcengineering/ui/kit` и с `size="x-small"` на `size="small"`:
+  размера `x-small` в ките нет, из-за этого основная кнопка была ниже шестерёнки и текст выходил за
+  её границы; правая группа получила `flex-shrink: 0`, строка — `min-width: 0`. Замер: кнопки 32px,
+  центры совпадают, `scrollWidth === clientWidth`.
+- `PermanentMeetingsList.svelte` — счётчик встреч в шапке группы удалён (владелец: «мы же убирали»);
+  метрики строк (40px) и шапок (32px) из библиотеки экранов остались.
+
+## 2026-11-14 (продолжение 2): офис с сотрудником и переименование этажа
+
+- `AddRoomPopup.svelte` — создание офиса спрашивает сотрудника: после «Office» показывается шаг
+  `[data-id="office-owner-step"]` с `AssigneeBox` (`contact.mixin.Employee`) и кнопками Cancel/Create,
+  выбранный попадает в `Data<Office>.person` (было жёстко `person: null`, и офис создавался пустым).
+- `RoomConfigure.svelte` — у выбора владельца офиса `_class` исправлен с `contact.class.Person` на
+  `contact.mixin.Employee`: `AssigneeBox` фильтрует `docQuery: { active: true }`, а `active` — поле миксина
+  Employee, поэтому запрос по классу Person не возвращал никого и офис нельзя было занять.
+- `FloorsNav.svelte` — в заголовке этажа рядом с «Add room» появилась кнопка «Rename a floor»
+  (карандаш, `EditFloorPopup` с `id`), видна при Owner/Maintainer.
+
+**Проверено на :8080:** «Rename a floor» открывает попап с текущим именем, сохраняет («Second» →
+«Second X» → обратно «Second»); создание офиса показывает шаг «Person / Cancel / Create».
+
+## 2026-11-14 (продолжение 3): попап добавления комнаты
+
+Причина «слепленных кнопок» — стиль `.antiPopup { flex-direction: row }` в самом `AddRoomPopup.svelte`:
+он располагал шаг выбора владельца в строку, и Person / Cancel / Create шли вплотную.
+
+- `AddRoomPopup.svelte` — варианты стали списком строк (`Button kind="ghost" size="medium" width="100%"
+  justify="left"`, шаг 4px, попап `min-width 15rem`, `padding 8px`); шаг владельца — колонка с
+  `gap 12px` и футером `justify-content: flex-end; gap: 8px`.
+
+**Замеры на :8080:** пункты списка 222×32 с шагом 4px, попап 240×158; в шаге Cancel 66×32 и Create
+65×32, зазор между ними 8px.
+
+Селектор сотрудника в этом шаге был чипом 87px («Person» с иконкой) — теперь поле диалога:
+`AssigneeBox` с `size="medium" kind="regular" width="100%" justify="left"`, 214×32, имя слева.
+
+Выбор сотрудника проверен на стенде: список не пуст (Current user → Зайцев Андрей → Recently used →
+AI Julia → Other → test test), выбор подставляет аватар и имя в поле, Create пишет `person` в офис и
+строка офиса появляется на этаже под именем владельца.
+
+Вид выбранного значения: у `AssigneeBox` был включён `showNavigate` — внутри поля справа появлялась
+кнопка-переход, имя обрезалось до `calc(100% - 1.5rem)`. Теперь `showNavigate={false}`, поле — рамка,
+аватар 16px и имя слева (214×32).
+
+Фильтр занятых (`excluded`) в шаге создания офиса пробовали и убрали: в воркспейсе, где офис есть у
+каждого, список оказывался пустым, а модель второй офис одного человека не запрещает.
+
+Ширина: попап шага поднят до `min-width: 20rem` (320px), поле — 294×32, имя «Зайцев Андрей» влезает с
+запасом; для длинных имён внутри поля добавлен `text-overflow: ellipsis` (`min-width: 0` у
+`.flex-presenter`).
+
+Сотрудник назначается и из карточки офиса: `EditRoom.svelte` для `isOffice(object)` при роли
+Owner/Maintainer показывает поле «Person» (`AssigneeBox`, та же геометрия, `showNavigate={false}`),
+`changeOfficePerson` пишет `person` в комнату. Замер на :8080: поле 320×32, значение подставляется.
+
+## 2026-11-13 (вечер, 4): правка вхождения серии идёт сразу во всю серию
+
+Владелец: при сохранении повторяющейся встречи не должно быть вопроса «только это событие / все
+события» — изменение применяется ко всей серии.
+
+**Исправлено:** `plugins/calendar-resources/src/utils.ts`, `updateReccuringInstance` — ветка с
+`UpdateRecInstancePopup` убрана. Виртуальное вхождение (`virtual === true`) резолвится в мастер серии
+(`calendar.class.ReccuringEvent` по `calendar` + `recurringEventId`), сдвиг дат считается относительно
+мастера (`base.date - (object.date - ops.date)`), затем один `client.update(base, ops)`. Невиртуальный
+документ обновляется на месте, как и раньше. Импорты попапа и `AccessLevel`/`closePopup` из `utils.ts`
+удалены. Удаление вхождения (`DeleteRecEvent`, `plugins/calendar-resources/src/index.ts:138`) выбор
+области сохраняет — там попап по-прежнему нужен.
+
+**Тест:** новый `plugins/calendar-resources/src/__tests__/updateReccuringInstance.test.ts` (4 кейса:
+серия без попапа, перенос дат относительно мастера, обновление реального вхождения на месте, мастер
+не найден → `false`). Пакет: 17/17.
+
+**Проверено на :8080 (Playwright, живые данные):** открыть серию «test2» (правило `Every 2 Day`) →
+переименовать в `test2z` → `Save` → попапа выбора нет, окно закрылось, имя изменилось у **обеих**
+плиток серии; обратное переименование в `test2` так же.
+
+## 2026-11-13 (вечер, 3): клик по встрече открывает обычный редактор календаря
+
+Регрессия (моя): клик по плитке открывал то панель, прилипшую к краю контента, то самодельное окно
+поверх неё. Правильный ответ один — **тот же редактор, что и у любого события**: `EditEvent`. Он уже
+умеет встречу: блок «Встреча / комната / Ссылка на встречу / Начать встречу» добавляет love-плагин
+через `calendar.extensions.EditEventExtensions` (`models/love/src/index.ts:582`), отдельная карточка
+для календаря не нужна.
+
+**Исправлено:**
+
+- `EventElement.svelte`, `Day.svelte` — `showPopup(calendar.component.EditEvent, { object: event }, 'center')`
+  без веток на класс события; ветка `eventCard(...)` → `openDoc` и `{ resolvers: false }` удалены
+  (мёртвые импорты тоже: `openDoc`, `eventCard`, `view`, `getClient`, `calendarModel`).
+- `eventCard.ts` вернулся к HEAD — опция `resolvers` не нужна, вызовов с ней не осталось.
+- `EditScheduledMeeting.svelte` — режим `modal`, контейнер `.meetingPopup-container` и зависимость от
+  `Card` удалены: компонент снова обычная карточка-заголовок панели. Кнопка `Join meeting / Leave room`
+  при этом осталась (это отдельный дефект, исправленный ранее).
+
+**Почему `'center'`, а не `'content'`.** В `packages/ui/src/popups.ts` overlay включается внутри
+`fitPopupElement`: `element != null` сразу ставит `show = false`, и только часть позиций (`center`,
+`centered`, `right`, `top`, `float`, …) возвращает `show = true`. `'content'` среди них нет — попап
+докнут к панели контента без overlay, поэтому `PopupInstance.handleOverlayClick` (клик вне окна) не
+вызывается вообще, остаются только крестик и Esc. `'center'` даёт overlay, а с ним и закрытие кликом вне.
+
+**Проверено на :8080 (Playwright):** клик по плитке «test2» → `.eventPopup-container` 403×621 по центру
+с `.modal-overlay`; клик вне окна закрывает (`eventPopup-container` 0), Esc закрывает; содержимое —
+название, время, ссылка на встречу, участник, блок «Meeting / Meeting Room 1 / Start meeting», календарь,
+напоминание, `Save`. `calendar-resources` 13/13, `love-resources` 87/87, обе сборки без ошибок.
+
+## 2026-11-13 (вечер, 2): кнопка входа не переключалась на «Выйти»
+
+Дефект: «меняешь комнату и потом заходишь — кнопка не меняется и остаётся подключиться».
+
+**Сравнение с develop.** На `develop` карточка комнаты (`EditRoom.svelte`) и карточка прошедшей встречи
+(`EditMeetingMinutes.svelte`) держат состояние звонка: пока `$lkSessionConnected` — кнопка «Leave room»
+(и «Show video», если видео скрыто), иначе «Join meeting» (`connectLabel`: `StartMeeting` для `Scheduled`).
+На ветке обе новые карточки этого состояния не имели:
+
+- `EditPermanentMeeting.svelte` — «Join as participant» (если есть живая сессия) и **всегда** «Join meeting»;
+  ни `$lkSessionConnected`, ни «Leave room».
+- `EditMeetingMinutes.svelte` (карточка сессии) — «Join» скрывался только при
+  `$lkSessionConnected && $currentMeetingMinutes?._id === object._id`, а `currentMeetingMinutes` выводится из
+  моего `ParticipantInfo` (`stores.ts`), который приходит с задержкой — кнопка оставалась «Join».
+
+**Исправлено.**
+- `EditPermanentMeeting`: состояние как в `EditRoom` — `inThisMeeting = $lkSessionConnected && (...)` →
+  «Leave room» (`data-id="permanent-meeting-leave"`, через `leaveMeeting()`), иначе «Join meeting».
+- `EditMeetingMinutes`: то же сравнение по **встрече**, а не по id документа (`meeting`/`eventId`), плюс
+  трактовка «подключён, но стор ещё не назвал сессию» как «я в этом звонке» — иначе кнопка залипала на время,
+  пока не приедет `ParticipantInfo`.
+
+**Проверено на :8080 (Playwright, живые данные):**
+- карточка постоянной встречи: до входа `permanent-meeting-join`=1, после входа `permanent-meeting-leave`=1
+  (текст «Leave room»), после выхода снова `permanent-meeting-join`=1;
+- карточка сессии после входа: `meeting-connect`=0, в карточке и в виджете «Leave room»; после выхода
+  `meeting-connect` возвращается.
+- Сборка `love-resources` чистая, 87/87 тестов; `calendar-resources` 13/13.
+
+## 2026-11-13 (вечер): кнопка «Присоединиться» в карточке прошедшей сессии
+
+Дефект от владельца: «кнопка присоединиться показывается в уже запущенной встрече, а если ты не во встрече —
+не показывает». Кнопка, о которой речь, живёт в карточке **сессии** (`view:component:EditDoc` для
+`love:class:MeetingMinutes`), компонент `EditMeetingMinutes.svelte`. Там `showConnectionButton` возвращает
+`false` при `status === MeetingStatus.Finished`, поэтому у прошедшей сессии кнопки нет вообще.
+
+**Исправлено:** при `Finished` вместо неё показывается та же «Join meeting» (`data-id="meeting-connect-current"`),
+которая ведёт в **текущую** встречу через сервис: `joinMeetingBySession(object.meeting, 'meeting')` для
+постоянной, `joinMeetingBySession(object.eventId, 'event')` для серии. Гости и read-only её не видят — как и
+кнопку живой сессии. Проверено на :8080: в карточке `test2` (было `Finished`) кнопка появилась, нажатие создало
+новую сессию — в карточке `Status Pending`, «Meeting start Nov 13 20:22», без runtime-ошибок и оверлея.
+
+**Рядом исправлено (та же причина «миксин не на объекте»):**
+
+- `plugins/love-resources/src/meetingLink.ts` — единый поиск миксина события: с объекта, затем из миксин-документа,
+  затем из документа события; кэш по серии (положительный — навсегда, отрицательный — 10 с, чтобы «Create meeting»
+  на существующем событии подхватывался без перезагрузки). Ключевая находка: `client.findOne(mixin, …)` отдаёт
+  документ с **вложенным** миксином, поэтому `permanentMeeting` нельзя читать с самого документа — из-за этого
+  встреча выглядела «просто серией» и открывалась случайная сессия. Тесты `meetingLink.test.ts` 7/7.
+- `MeetingEventBadge.svelte` — иконка «присоединиться» на плитке больше не зависит от того, пришёл ли миксин
+  в запросе: на стенде в «Встречах» 4 плитки → 4 иконки.
+- `EventElement.svelte`, `Day.svelte` — клик по плитке уважает редактор, который вернул `eventCard`
+  (карточка встречи с Join), и только при его отсутствии открывает документ резолвера.
+- `plugins/love-resources/src/index.ts` — `resolveMeetingCard` использует общий `findMeetingLink` (без дубля логики).
+
+Пакет `love-resources`: сборка чистая, 87/87 тестов; `calendar-resources` 13/13.
+
+## 2026-11-13 (продолжение): пункты 1–2 корректировок в коде, стенд на :8080
+
+**Сделано (код + unit, к стыду — пока без сквозной проверки переноса):**
+
+- `plugins/love/src/utils.ts` → `occurrencePin(current, overrides)`: пин вхождения = `originalStartTime` для
+  перенесённого, сам старт для обычного. Тесты в `resolveOccurrence.test.ts` (21/21).
+- `services/love/src/workspaceClient.ts` → `resolveSession` сверяет `live.occurrence` с пином: расхождение →
+  `finishMeeting` (и `Pending`, и `Active` — решение владельца) + новая сессия с тем же `eventId`; лобби
+  (`create: false`) сессию не трогает; сессии без пина (легаси) принимаются. `createSession` пишет в
+  `occurrence` именно пин.
+- `occurrenceOverrides` без `$or` (Postgres его не переводит), ошибка чтения — `error`.
+- `LoveServiceError` несёт разобранное тело; `joinMeetingBySession` на 403 показывает статус
+  (`MeetingNotOpenYet` с временем ближайшего вхождения / `MeetingIsOver`) вместо непойманной ошибки.
+  Новые модули `meetingClosed.ts`, `occurrenceTime.ts`. Строки — во всех 12 локалях.
+- Тесты: `services/love` 239/239, `plugins/love` 55/55, `plugins/love-resources` 80/80; сборки чистые.
+  Тест `resolveSession` падает на старом коде (проверено откатом), фейк клиента бросает на `$or` как Postgres.
+
+**Проверено на стенде:** образ `pod-love` пересобран и развёрнут (в бандле есть `occurrencePin`);
+`/resolveSession` по живому сервису отвечает 200 и **повторный** вызов отдаёт ту же сессию
+(`6af7081c307cf07d12cdfff5`), то есть случайного пересоздания нет. LiveKit поднят контейнером на :7880.
+
+**Важно для сквозной проверки переноса:** цель резолва — `kind: 'meeting'`, если у серии есть
+`permanentMeeting` (`findMeetingTarget`). У всех серий в воркспейсе `test` он есть, поэтому ветка «перенесли →
+пересоздали» срабатывает только для **события-встречи без постоянной встречи** (создаётся календарём с
+галочкой «Create meeting»). Такого события в воркспейсе нет (единственное — «Meeting create 3643 edited» — без
+даты, вход по нему даёт `no-occurrence`). Следующий шаг: создать событие-встречу в календаре планировщика
+(`/workbench/test/time` → виджет календаря), затем сценарий: Join → сдвиг времени → Join → в БД старая сессия
+`Finished`, новая `occurrence` = новое время, `linkId` не изменился.
+
+**Стенд:** `:8087` — compose (nginx+front), `:8080` — `dev/prod && pnpm run dev-server` (проксирует API на 8087,
+одни и те же куки). Вход — «Login with code», код в mailpit (`:8025/api/v1/messages`). Аккаунт
+`cisarup@ogzmail.com`, воркспейс `test` = `c52f0d80-515c-4ff5-9b52-397be26debb0`. Навигатор офиса скрыт, пока
+`localStorage['love-visibleNav']` не задан. Одноразовые скрипты запускать `"/c/Program Files/nodejs/node.exe"`
+(шелловый `node` — обёртка, пишет `stdout is not a tty`).
+
+## 2026-11-13: пункт «перевыпуск ссылки» отменён — ссылка та же, время в БД, встреча пересоздаётся
+
+Уточнение владельца (дословно): «есть пункт с созданием новой ссылки, этот пункт убрать и сделать чтобы менять
+не ссылку, а в базе двигать время начала и пересоздавать встречу по той же ссылке если её перенесли».
+
+**Что изменено в спеке `openspec/changes/love-meetings-corrections`** (`openspec validate --strict` — valid):
+
+- `proposal.md`: пункт 1 переформулирован (ссылка НЕ перевыпускается), добавлено правило «проверки не подтверждают
+  сами себя»;
+- `design.md`: Decision 1 переписан — «перенос времени: ссылка та же, встреча пересоздаётся по новому слоту»,
+  с первопричиной `resolveSession` (сессия прежнего слота возвращается по `{ eventId, status }` без сверки
+  `occurrence`) и ролью `occurrencePin`;
+- `tasks.md`: раздел 1 заменён (1.1–1.8), 4.3 переписан под «та же ссылка, новая сессия»;
+- `specs/love-meetings/spec.md`: первое требование заменено на «Перенос встречи сохраняет ссылку и пересоздаёт
+  встречу» с шестью сценариями (одиночная, постоянная, устаревшая сессия, звонок идёт, изменение без времени,
+  перенос вхождения).
+
+**Состояние кода на 2026-11-13 (проверено grep'ом, ничего из корректировок 1–5 ещё не сделано).**
+
+- `linkVersion` в `server-plugins/**` — ни одного вхождения: триггеров перевыпуска нет (и не будет по новому
+  решению).
+- `services/love/src/workspaceClient.ts:784` — `$or` в `occurrenceOverrides` на месте (причина 403 на Postgres).
+- `services/love/src/workspaceClient.ts:817-834` — `resolveSession` по-прежнему принимает любую живую сессию по
+  `{ eventId, status }`, `occurrence` не сверяется (причина «вход в старый слот»).
+- `plugins/love-resources/src/components/PermanentMeetingsList.svelte` — `openDoc` (строка 157) и шестерёнка на
+  месте; `EditScheduledMeeting.svelte` — `joinLive` на месте; `MeetingEventBadge.svelte` — `.permanent-mark` на
+  месте. Откат UI (пункт 3) не выполнен.
+- Новых строк `MeetingNotOpenNow`/`MeetingStartedLongAgo` в `plugins/love-assets/lang/*` нет (пункт 2.4 не начат).
+
+**Стенд на 2026-11-13.** `dev` поднят (`dev-front-1`, `dev-transactor-1`, `dev-love-1` и остальные — Up),
+но `dev-nginx-1` в рестарте: `host not found in upstream "mail_server:8097"`. Порты 8080 и 8087 с машины не
+отвечают (`000`), то есть для Playwright-проверок сначала нужно: поднять `mail_server`, `mail_client`, `mailpit`
+и перезапустить `nginx`; LiveKit в compose нет — поднимать контейнером (`dev/run_livekit.sh` или
+`docker run … livekit/livekit-server --config /livekit.yaml` с `MSYS2_ARG_CONV_EXCL='*'`).
+
+**Порядок дальше:** 1 (перенос времени) → 2 (403) → 3 (откат UI) → 4 (покрытие) → 5 (прогон), с проверкой каждого
+пункта на стенде через Playwright и значениями из `psql`, а не из моков.
 
 ## 2026-11-12: корректировки владельца заведены в `love-meetings-corrections`
 
