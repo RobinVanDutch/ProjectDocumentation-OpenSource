@@ -21,6 +21,13 @@
 
 > **Актуальность.** Пункты 1, 4–8 написаны по отчёту о ветке до появления PR #428. Фактическое состояние
 > кода и расхождения с этими документами — в `audit-pr-428.md`; он главнее, если формулировки расходятся.
+>
+> **Остаток по регулярным созвонам (2026-11-05, уточнено 2026-11-06)** — `openspec/changes/love-recurring-meetings/`:
+> пять групп задач по списку владельца (планировщик, создание с регулярностью, настройки, правка/удаление, изменение
+> серии). Изменение валидно, 10 из 23 задач закрыто кодом ветки `FUSIO-1307-livekit-shared-link`
+> (коммиты `a579404650`, `e2da22dca2`). `love-meetings-pr428-gaps` тоже на месте (28/39): его группа 12 ушла сюда,
+> в `love-recurring-meetings`. Черновик `love-planner-permanent-meeting` поглощён этим изменением и лежит
+> в `openspec/changes/archive/`.
 
 ## Структура
 
@@ -39,13 +46,18 @@ platform/
     ├── specs/                  основная база требований (наполняется при archive)
     └── changes/
         ├── love-meeting-link/      гостевая ссылка на ветке FUSIO-1307-livekit-shared-link
-        └── love-meetings-followups/
-            ├── proposal.md     зачем и что меняется
-            ├── design.md       как, риски, открытые вопросы
-            ├── tasks.md        чек-лист с проверками
-            └── specs/
-                ├── love-meetings/spec.md
-                └── office-navigator/spec.md
+        ├── love-meetings-followups/
+        │   ├── proposal.md     зачем и что меняется
+        │   ├── design.md       как, риски, открытые вопросы
+        │   ├── tasks.md        чек-лист с проверками
+        │   └── specs/
+        │       ├── love-meetings/spec.md
+        │       └── office-navigator/spec.md
+        └── love-recurring-meetings/   остаток по регулярным созвонам (планировщик, настройки, правка/удаление)
+            ├── proposal.md
+            ├── design.md       состояние кода на 05.11 и открытые решения
+            ├── tasks.md        5 групп по списку владельца
+            └── specs/love-recurring-meetings/spec.md
 ```
 
 ## Команды OpenSpec
