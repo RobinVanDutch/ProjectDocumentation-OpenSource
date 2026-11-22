@@ -398,3 +398,70 @@ stateDiagram-v2
     мастер - только копия с access = Owner
   end note
 ```
+
+## 14. Раздел встреч после QA (изменение love-meetings-unified-views, 2026-11-20)
+
+Что показывает: как требования QA ложатся на текущие точки кода и что зависит от решения владельца.
+
+```mermaid
+flowchart TD
+  QA1["QA-1 контраст «Новая группа»<br/>светлая тема"] --> Btn["PermanentMeetingsHeaderActions:40<br/>Button kind=secondary"]
+  Btn --> Tokens["Button.svelte &--secondary<br/>--kit-button-subtle-LabelColor"]
+  QA2["QA-2 пустые группировка/сортировка"] --> Views["models/love: TablePermanentMeetings,<br/>ListPermanentMeetings"]
+  Views --> Opts["viewOptions.groupBy / orderBy<br/>MODEL_HIDDEN_KEYS"]
+  QA4["QA-4 убрать создание без календаря"] --> Form["PermanentMeetingForm:<br/>allowNoCalendar + ShowInCalendar"]
+  QA6["QA-6 первый шаг: тип встречи"] --> Form
+  QA3["QA-3 календарь/список/таблица"] --> Nav["OfficeNavigator + Hall<br/>officeView"]
+  QA5["QA-5 группы в боковом меню"] --> Nav
+  Nav --> Open{"Решение владельца:<br/>как объединять Event+mixin<br/>и PermanentMeeting: Space"}
+  Open --> A["Агрегатор (SpecialView)"]
+  Open --> B["Два набора под общим<br/>переключателем представлений"]
+  Open --> C["Отдельный вьюлет<br/>поверх MeetingEventLink"]
+```
+
+## 15. Создание встречи после QA-6
+
+Что показывает: новая последовательность шагов и место, где раньше был путь «без календаря».
+
+```mermaid
+stateDiagram-v2
+  [*] --> Тип: «Новая встреча»
+  Тип --> Разовая: выбран «Разовая»
+  Тип --> Повторяющаяся: выбрана «Повторяющаяся»
+  Разовая --> Время
+  Повторяющаяся --> Время
+  Время --> Повтор: только для повторяющейся
+  Время --> Участники: для разовой
+  Повтор --> Участники
+  Участники --> Создание
+  Создание --> Календарь: серия или одиночное событие (путь «без календаря» удалён)
+  Календарь --> [*]
+  note right of Создание
+    QA-4: allowNoCalendar удаляется,
+    встреча всегда видна в календаре
+  end note
+```
+
+## 16. Навигация встреч после решения владельца (2026-11-20, Р1/Р2)
+
+Что показывает: «Постоянные встречи» переезжают в «Встречи», их место занимает вкладка «Группы».
+
+```mermaid
+flowchart LR
+  subgraph Nav["Навигатор офиса"]
+    M["Встречи<br/>/love/meetings"]
+    G["Группы<br/>/love/groups<br/>(было: Постоянные встречи)"]
+    F["Этажи<br/>/love/&lt;floorId&gt;"]
+  end
+  M --> Switch{"Переключатель сверху"}
+  Switch --> Cal["Календарь<br/>(CalendarScheduledMeetings)"]
+  Switch --> List["Список встреч<br/>(было в постоянных)"]
+  Switch --> Table["Таблица встреч<br/>(было в постоянных)"]
+  G --> Set1["Встречи<br/>Event + MeetingEventLink"]
+  G --> Set2["Постоянные встречи<br/>PermanentMeeting + серия"]
+  G --> Set3["Встречи без отображения<br/>PermanentMeeting без серии"]
+  Set1 --> Groups["Секции по MeetingGroup<br/>без группы - последняя"]
+  Set2 --> Groups
+  Set3 --> Groups
+  Old["/love/permanent"] -.->|redirect| G
+```

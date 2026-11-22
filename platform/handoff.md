@@ -1,5 +1,48 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
+## 2026-11-20: отчёт QA по финальной версии (текущая точка)
+
+**Состояние кода:** ветка `FUSIO-1307-livekit-shared-link`, HEAD `a86666172a`, рабочее дерево чистое,
+фича отдана тестировщикам. Документация подсистемы актуальна: `docs/love.md`,
+`docs/features/office-meetings.md`.
+
+**Новое изменение:** `openspec/changes/love-meetings-unified-views/` — фиксирует отчёт QA:
+- дефекты: контраст кнопки «Новая группа» в светлой теме; пустые группировка и сортировка на странице
+  постоянных встреч;
+- требования: единый раздел встреч с 3 представлениями (календарь/список/таблица); убрать создание
+  встречи без календарной серии; группы — отдельным пунктом бокового меню; первым шагом окна создания
+  выбирать «регулярная/разовая».
+
+**С чего начинать (по порядку):** `tasks.md` §1 (QA-1, QA-2, QA-4) → §2 (QA-6) → §3–§4 после ответов
+владельца на open questions из `proposal.md` (модель объединения двух классов, смысл «календаря» для
+группы, вид «разной формы» создания, судьба пункта «Встречи»).
+
+**Решение владельца 2026-11-20 (Р1, Р2) — зафиксировано в `proposal.md` и `design.md` §5:**
+- «Постоянные встречи» объединяются с «Встречами»: вкладка «Встречи» = календарь + переключатель
+  «Календарь / Список встреч / Таблица встреч»; список и таблица — те, что сейчас в постоянных встречах.
+- Вместо вкладки «Постоянные встречи» — вкладка «Группы», где показываются три набора: встречи
+  (не постоянные), постоянные встречи, встречи без отображения (не показываются в календаре и планировщике,
+  т.е. `PermanentMeeting` без серии).
+- **Конфликт с QA-4:** «вырезать создание без ссылки» против набора «встречи без отображения». Реализацию
+  QA-4 не начинать до ответа (см. `proposal.md`, «Открытый вопрос по конфликту QA-4 и Р2»).
+
+**Точки правки (сверено с кодом 2026-11-20):**
+- кнопка: `plugins/love-resources/src/components/PermanentMeetingsHeaderActions.svelte:40`,
+  стили — `packages/ui/src/ui-kit/button/Button.svelte` блок `&--secondary`;
+- группировка/сортировка: `models/love/src/index.ts` — `TablePermanentMeetings` (`groupBy: []`),
+  `ListPermanentMeetings` (`groupBy: ['group','members','private','createdBy']`), `MODEL_HIDDEN_KEYS`;
+- создание без календаря: `PermanentMeetingForm.svelte` (`allowNoCalendar`, тоггл `ShowInCalendar`),
+  `CreatePermanentMeetingPopup.svelte`, `PermanentMeetingsHeaderActions.svelte` (`allowNoCalendar: true`);
+- навигатор: `plugins/love-resources/src/components/OfficeNavigator.svelte`, `Hall.svelte`,
+  `officeSegment`/`officeView` в `stores.ts`.
+
+**Проверки после правок:** `pnpm build --to @hcengineering/plugin-love-resources`
+(и `@hcengineering/model-love` при изменениях модели), `npx jest` в пакете,
+`prettier --write --end-of-line auto` → `eslint --fix` по изменённым файлам.
+Sanity по ветке не гонялся; стенд :8087 + dev-server :8080, LiveKit :7880.
+
+---
+
 Состояние на 2026-11-14 (вечер). Продолжать с этого места; задачи — в
 `openspec/changes/love-office-and-calendar-ui/tasks.md`.
 
