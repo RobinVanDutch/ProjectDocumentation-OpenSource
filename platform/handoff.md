@@ -1,6 +1,182 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
-## 2026-11-20: отчёт QA по финальной версии (текущая точка)
+## 2026-11-24 (вечер): итог дня, точка входа на 2026-11-25
+
+**Работаем в:** `c:\Users\Андрей\Desktop\project\platform\platform`, ветка `FUSIO-1307-livekit-shared-link`,
+HEAD `ab97fd3f7f` («переделанное отображение модального окна и групп»). Всё в рабочем дереве, **без
+коммитов** (коммитит владелец). Изменено 30 файлов — список в разделе «Файлы дня» ниже.
+
+**Стенд:** compose `dev/docker-compose.yaml` (UI `:8087`), dev-server `:8080`
+(`cd dev/prod && pnpm run dev-server`) — вся проверка сегодня шла на `:8080`; Storybook
+`http://127.0.0.1:6006`; аккаунт `cisarup@ogzmail.com` / `Test123456!`, воркспейс `test`; mailpit `:8025`.
+
+### Что сделано и проверено сегодня
+
+1. **Единый источник встреч** (изменение `openspec/changes/love-meetings-single-source/`).
+   - Каждая встреча раздела «Встречи» хранится документом `PermanentMeeting`; `Event` создаёт только
+     путь планировщика.
+   - Модель `models/love/src/index.ts`: `duration?: number` (`TypeNumber`, строка `Duration`) и
+     `room?: Ref<Room>` у `TPermanentMeeting`.
+   - Миграция `models/love/src/migration.ts` → `eventMeetingsToPermanent`, state
+     `event-meeting-to-permanent`, режим `upgrade`: событие без `recurringEventId` и без
+     `link.permanentMeeting` получает документ встречи (`calendar: true`, `startDate`, `duration`,
+     участники из `contact.mixin.Employee`, `group`), затем в `Event.link` пишется `permanentMeeting`.
+     Идемпотентна, события не удаляет.
+   - Миграция **применена** на стенде: понижали `global_account.workspace_status.version_patch` до 16,
+     `WS_OPERATION=all+backup` прогнал upgrade; документы созданы для `test`, `test2`, `One-off check`,
+     `еуыеыеые`.
+   - `plugins/love-resources/src/permanentMeetingSchedule.ts`: `PermanentMeetingInput` получил `duration`,
+     `room`, `calendar`, `series`; `createOneOffMeeting` делегирует в
+     `createPermanentMeetingWithSchedule`, поэтому разовая встреча тоже пишет документ.
+
+2. **Разведение календаря раздела и Планировщика** (решение владельца, не путать эти два понятия).
+   - У пользователя два календаря: личный `<uuid>_calendar` и `<uuid>_meetings_calendar` («Meetings»,
+     создаётся по требованию — `MEETINGS_CALENDAR_SUFFIX`, `findOrCreateMeetingsCalendar`).
+   - Встречи, созданные **во вкладке «Встречи»**, кладут событие в календарь «Meetings»; Планировщик
+     этот календарь не читает: фильтр `!(p._id as string).endsWith('_meetings_calendar')` в
+     `plugins/time-resources/src/components/team/WithTeamData.svelte` (переменная `calendarIds`) и в
+     `plugins/time-resources/src/components/PlanningCalendar.svelte` (в колбэке `calendarsQ.query`).
+   - Встреча из сетки/планировщика идёт в личный календарь — событие видно в Планировщике и в календаре.
+   - **Тумблер «в календаре» в окне создания обязателен** (владелец отдельно настаивал). Он есть только
+     в окне, открытом из раздела «Встречи» (`{#if date === undefined}`), и передаётся как `calendar`.
+
+3. **Таблицы/списки показывают все встречи**: постоянные, разовые и без серии — таблица «Всего: 11»,
+   затем 29; вкладка «Группы» — секции `Sprint`, `Не указана`.
+
+4. **Метки повтора по `repeatEvery`, а не по наличию `permanentMeeting`**:
+   `PermanentMeetingPresenter.svelte` (метка обёрнута в `{#if value.repeatEvery !== undefined}`) и
+   `MeetingEventBadge.svelte` (`repeats = meeting?.repeatEvery !== undefined`).
+
+5. **Окно создания против макета** (`Storybook → Love/Create meeting`): заголовок блока времени —
+   «Время» (`love.string.Time`, ключ добавлен во все 12 локалей); дефолт таба — «Разовая встреча»;
+   порядок блоков проверен.
+
+6. **QA-1 (контраст)**: `packages/theme/styles/button.scss` — правило hover больше не применяется к
+   `secondary` (`&.primary, &.positive, &.negative`). На стенде: светлая тема `rgb(60,65,73)` (≈9:1),
+   тёмная `rgb(138,143,152)` (≈5:1).
+
+7. **Группы: переименование и удаление из вкладки** (задача 4.4).
+   - `PermanentMeetingGroupPresenter.svelte` принимает `object` — `ListHeader` передаёт документ группы
+     (`categoryRefDoc`) рядом с ref, по которому идёт группировка. **Без `object` меню не рендерилось**:
+     в заголовке секции приходил ref, `doc` оставался `undefined`.
+   - Меню (`IconButton(ui.icon.DotsVertical)`, `data-id="meeting-group-menu"`) → «Переименовать»
+     (`MeetingGroupPopup` в режиме `group`, кнопка `view.string.Rename`, `renameMeetingGroup`) и
+     «Удалить группу» (`MessageBox` → `deleteMeetingGroup` в `groups.ts`: у встреч `$unset { group }`,
+     затем `client.remove(group)`).
+   - Проверено на стенде: `Sprint` → `Sprint QA` → обратно; временная группа `QA temp` с одной встречей
+     удалена, «Не указана» 31 → 32, встреча осталась без группы.
+
+### Проверки сегодня
+
+`pnpm build --to @hcengineering/love-resources` — 80 пакетов, 0 ошибок; `--to @hcengineering/model-love` —
+103, 0; `--to @hcengineering/love` — 20, 0; `--to @hcengineering/time-resources` — 75, 0;
+`--to @hcengineering/theme` — 3, 0. Jest: `permanentMeetingSchedule.test.ts` +
+`meetings.createMeetingDocument.test.ts` — 15/15. Локали — 12 файлов, JSON валиден.
+Sanity по ветке **не гонялся**. `openspec validate --all --strict` — 8 passed, 1 failed: в
+`openspec/changes/love-meetings-unified-views/specs/love-office-navigation/spec.md` предупреждение о
+длине текста требования (>500 символов); файл не менялся с 2026-11-20, предупреждение давнее — при
+следующем заходе в это изменение разнести на сценарии.
+
+### Что осталось (порядок на завтра)
+
+1. **4.3, остаток** — пустая группа не рисуется вовсе (`categoryHeader` скрывается при пустом списке),
+   поэтому действия «Новая встреча в группе» в ней нет. Нужно решение: свой заголовок поверх
+   отфильтрованного списка внутри вкладки «Группы» (общий `ListHeader` не трогаем) либо правка общего
+   `ListHeader`/`List` в `plugins/view-resources` — второе затрагивает все списки приложения.
+2. **4.5 / 3.4 / 6.4 — sanity** (`tests/sanity/tests/love/meetings.*`): ожидания про отдельные пункты
+   «Встречи» / «Постоянные встречи» больше не верны; добавить проверки: все встречи в таблице, новый
+   календарь «Meetings», Планировщик без встреч из раздела, меню группы.
+3. **3.3** — единые фильтры, колонка типа встречи, переход в карточку нужного класса.
+4. **2.1 / 2.2 (QA-6)** — первый шаг формы «Разовая / Повторяющаяся»: сейчас тип выбирается табом в
+   `CreateMeetingDialog.svelte`, отдельного шага с подтверждением смены типа нет.
+5. **2.3 — отложено осознанно**: поле «Имя или почта гостя» и письмо-приглашение (нужны шаблон письма,
+   согласие на рассылку, провайдер).
+6. **1.3 / 5.1 (QA-4) — блокирует владелец**: вариант (а) `allowNoCalendar` остаётся (сейчас работает
+   он) или (б) удаляем `allowNoCalendar`/`ShowInCalendar`.
+7. **3.2 — блокирует владелец**: показывать ли вхождения постоянных встреч в календаре раздела отдельным
+   слоем (сейчас календарь раздела живёт по событиям).
+
+### Файлы дня (рабочее дерево, 30 файлов)
+
+- модель/плагин: `models/love/src/index.ts`, `models/love/src/migration.ts`, `plugins/love/src/types.ts`,
+  `plugins/love/src/plugin.ts`;
+- локали: `plugins/love-assets/lang/*.json` (12);
+- `plugins/love-resources/src/permanentMeetingSchedule.ts`, `groups.ts`,
+  `__tests__/permanentMeetingSchedule.test.ts`, `components/CreateMeetingDialog.svelte`,
+  `components/CreatePermanentMeetingPopup.svelte`, `components/MeetingGroupPopup.svelte`,
+  `components/PermanentMeetingGroupPresenter.svelte`, `components/PermanentMeetingPresenter.svelte`,
+  `components/MeetingEventBadge.svelte`;
+- `plugins/time-resources/src/components/PlanningCalendar.svelte`,
+  `plugins/time-resources/src/components/team/WithTeamData.svelte`;
+- `packages/theme/styles/button.scss`;
+- документация: `docs/love.md`, `docs/features/office-meetings.md`.
+
+### Вспомнить завтра (грабли, на которые уже наступали)
+
+- `Планировщик ≠ Календарь`: календарь раздела — это `div.hulyHeader-container`, кнопка
+  `button#app-time:string:Planner` — Планировщик. Требования к ним разные, не путать.
+- Правки `.scss` подхватываются только после перезапуска dev-server `:8080`.
+- Плагины `@hcengineering/ui` и `love` импортируются **default**, не named; `IconButton` — только из
+  `@hcengineering/ui/kit`.
+- Образ `transactor` собирается из `@hcengineering/pod-server` (`pod-transactor` не существует).
+- Миграции love прогоняются upgrade'ом воркспейса: при равенстве версий сервис воркспейс не берёт,
+  нужно опустить `version_patch` в `global_account.workspace_status`.
+- Заголовок секции списка получает **ref** группы плюс документ отдельным пропом `object`.
+- `love-service` отдаёт 404 на `/meetingLink` — конфиг стенда, не код; из-за этого не показывается попап
+  со ссылкой.
+- Формат файлов: без `pnpm run format` (агент не запускает форматирование) и без коммитов.
+
+## 2026-11-24: единый источник встреч (утро; см. раздел «вечер» выше)
+
+**Состояние кода:** ветка `FUSIO-1307-livekit-shared-link`, HEAD `ab97fd3f7f` («переделанное отображение
+модального окна и групп», 2026-11-23). Рабочее дерево чистое: откат к версии `e4a9cd0051` (2026-11-22),
+сделанный 24.11 в 12:56, убран по решению владельца — `git checkout --` по 17 файлам, спека OpenSpec
+возвращена к `5f9e654`.
+
+**Проверено после восстановления:** `pnpm build --to @hcengineering/love-resources` (80 пакетов, 0 ошибок),
+`--to @hcengineering/model-love` (103 пакета, 0 ошибок), jest `permanentMeetingsView.test.ts` — 5/5.
+
+**Найдено на стенде `:8087` (вчерашняя версия):** разовая встреча (`One-off check`), созданная из окна
+«Новая встреча», есть в календаре, но отсутствует в таблице раздела «Встречи» и во вкладке «Группы».
+Причина: `createOneOffMeeting` (`permanentMeetingSchedule.ts:346`) создаёт только `calendar.class.Event`
+с миксином, без документа `PermanentMeeting`, а оба списка строятся по `PermanentMeeting`
+(`MeetingsView.svelte:67`, `MeetingGroupsView.svelte:37`).
+
+**Новое изменение:** `openspec/changes/love-meetings-single-source/` (валидно, `openspec validate --strict`).
+Решения владельца 2026-11-24:
+- любая встреча из раздела «Встречи» хранится как `PermanentMeeting`; `Event` создаёт только планировщик;
+- в модель добавляется `duration` для разовой встречи;
+- существующие `Event + миксин` переносятся миграцией `event-meeting-to-permanent`;
+- вкладка «Группы» не меняется; переключатель «Календарь / Таблица» не меняется.
+
+**Расхождения окна создания с макетом `Storybook → Love/Create meeting`** (вчерашняя версия):
+`CreateMeetingDialog.svelte:244` — заголовок блока времени выводит `love.string.Meetings` («Meetings»)
+вместо «Time»; `:365` — вместо поля «Имя или почта гостя» + «Добавить» только кнопка «Members»;
+`:327` — заголовок блока календаря через `love.string.CalendarMeetingView` («Calendar»).
+
+**Окружение:** стенд `:8087` (образ `front` пересобран 2026-11-24), dev-server `:8080`
+(`cd dev/prod && pnpm run dev-server`), Storybook `http://127.0.0.1:6006` (`pnpm storybook:dev`),
+аккаунт `cisarup@ogzmail.com`, воркспейс `test`. Love-сервис отдаёт 404 на `/meetingLink` — конфиг стенда.
+
+**С чего начинать:** `openspec/changes/love-meetings-single-source/tasks.md` §4 (документация вне кода) —
+остальное закрыто в тот же день.
+
+**Итог 2026-11-24 (проверено на стенде `:8080`, dev-server):**
+- модель: `duration` и `room` в `TPermanentMeeting`, строка `Duration` в 12 локалях;
+- миграция `event-meeting-to-permanent` применена upgrade'ом воркспейса: для событий `test`, `test2`,
+  `One-off check`, `еуыеыеые` созданы документы встреч, события и серии сохранены;
+- разовая встреча из раздела «Встречи» → документ встречи (`calendar: false`), видна в таблице и в
+  «Группах», в календаре раздела её нет;
+- встреча из сетки планировщика → документ + `Event`, событие видно в календаре и с кнопкой входа;
+- таблица раздела: «Всего: 11» — все встречи на месте, иконки «камера / перечёркнутый глаз»;
+- `pnpm build:lint --to @hcengineering/love-resources` — 80 пакетов, 0 ошибок;
+  `pnpm build --to @hcengineering/model-love` — 103 пакета, 0 ошибок; jest 15/15.
+
+**Важно для стенда:** образ `transactor` собирается из `@hcengineering/pod-server` (пакета
+`pod-transactor` не существует). Чтобы upgrade прогнал миграции, версию воркспейса в
+`global_account.workspace_status` опускали до `0.8.16`: при равенстве версий сервис воркспейс не берёт.
+
+## 2026-11-20: отчёт QA по финальной версии
 
 **Состояние кода:** ветка `FUSIO-1307-livekit-shared-link`, HEAD `a86666172a`, рабочее дерево чистое,
 фича отдана тестировщикам. Документация подсистемы актуальна: `docs/love.md`,

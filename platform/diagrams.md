@@ -465,3 +465,64 @@ flowchart LR
   Set3 --> Groups
   Old["/love/permanent"] -.->|redirect| G
 ```
+
+## 17. Единый источник встреч (2026-11-24, `love-meetings-single-source`)
+
+```mermaid
+flowchart TD
+  A["Раздел «Встречи» → Новая встреча"] --> B["CreateMeetingDialog<br/>calendar: false"]
+  B --> C["PermanentMeeting<br/>repeatEvery? + startDate + duration"]
+  C --> D["Таблица раздела «Встречи»"]
+  C --> E["Вкладка «Группы»<br/>секции по group"]
+  C -.->|"серии нет"| F["Планировщик: ничего"]
+
+  G["Планировщик → создать встречу"] --> H["CreateMeetingDialog<br/>calendar: true"]
+  H --> I["PermanentMeeting"]
+  H --> J["calendar.class.Event<br/>(серия)"]
+  I --> D
+  I --> E
+  J --> K["Планировщик: событие"]
+
+  L["Старые Event + миксин<br/>без permanentMeeting"] -->|"миграция event-meeting-to-permanent"| M["PermanentMeeting<br/>calendar: true"]
+  M --> D
+  M --> E
+```
+
+Легенда: сплошная стрелка — создаётся/показывается, пунктир — «не появляется».
+
+Риски: повторная миграция (защита — условие «нет `permanentMeeting`»), события без `duration`
+(поле необязательное), диалог из планировщика (признак источника передаётся явно и покрыт тестом).
+
+## 18. Два календаря и меню группы (2026-11-24)
+
+```mermaid
+flowchart LR
+  subgraph Раздел["Вкладка «Встречи»"]
+    D1["Новая встреча<br/>тумблер «в календаре»"]
+  end
+  subgraph Планировщик["Планировщик (кнопка app-time:string:Planner)"]
+    P1["создать встречу в сетке"]
+  end
+
+  D1 -->|"тумблер включён"| MC["календарь Meetings<br/>uuid_meetings_calendar"]
+  D1 -->|"тумблер выключен"| NO["без события<br/>(только ссылка)"]
+  P1 --> PC["личный календарь<br/>uuid_calendar"]
+
+  MC --> VC["Календарь раздела: события видны"]
+  MC -.->|"фильтр _meetings_calendar"| XP["Планировщик: НЕ видит"]
+  PC --> VP["Планировщик: видит"]
+```
+
+Группа во вкладке «Группы»:
+
+```mermaid
+flowchart TD
+  H["categoryHeader<br/>ref группы + object={categoryRefDoc}"] --> A["PermanentMeetingGroupPresenter"]
+  A -->|"doc есть"| M["меню (DotsVertical)"]
+  M --> R["Переименовать<br/>MeetingGroupPopup → renameMeetingGroup"]
+  M --> X["Удалить группу<br/>MessageBox → deleteMeetingGroup<br/>$unset group у встреч, затем remove"]
+  A -->|"doc === undefined"| N["меню нет<br/>(сюда приходил ref до 4.4)"]
+```
+
+Легенда: пунктир — «не появляется». Без пропа `object` заголовок секции оставался без документа
+и меню не рендерилось — это и была причина незакрытой 4.4.
