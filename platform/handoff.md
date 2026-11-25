@@ -1,5 +1,69 @@
 # Handoff: гостевая ссылка на встречу (FUSIO-1307)
 
+## 2026-11-25 (вечер): окно встречи по макету, точка входа на 2026-11-26
+
+**Работаем в:** `c:\Users\a.zaytsev\Desktop\Projects\platform`, ветка `FUSIO-1307-livekit-shared-link`.
+Всё в рабочем дереве, **без коммитов** (коммитит владелец). Изменение OpenSpec:
+`openspec/changes/love-meeting-window/` (valid, 20/28 задач).
+
+**Стенд:** UI `:8080` (dev-server), Storybook `:6006`, воркспейс `ws-6af5386f-768a4ea9e6-a11036`,
+проверяли на встрече «123312» во вкладке «Встречи» → календарь.
+
+### Что сделано и проверено
+
+1. **Макет** — `dev/storybook/src/love/MeetingOverlay.svelte` + `MeetingOverlay.stories.ts`, 9 стори
+   (`Love/Meeting window (overlay)`): окно поверх затемнённого планировщика, kit-`Dialog width="large"`,
+   секции О встрече / Когда / Где / Участники / Доступ по ссылке / Напоминания, приглашение гостя по
+   почте, ответ участника в футере. Проверено в Storybook в двух темах.
+
+2. **Две карточки вместо одной** (решение владельца: календарь Планировщика ≠ календарь «Встреч»).
+    - `plugins/love-resources/src/components/EditMeeting.svelte` (новый) — окно встречи по макету:
+      заголовок «Настройки встречи», Название (`TextInput`), Описание (`TextArea`, 2 строки),
+      Группа встреч (`Dropdown`, скрыта без групп), Тип (Разовая/Регулярная), Весь день (с подсказкой),
+      Дата (два `DateSelect`), Часовой пояс, Повторять каждые (`NumberInput` + единица) с подписью
+      «Следующая встреча», Переговорная, Отображение в календаре, Участники, Напоминания с чипами.
+      **Нет** «Местоположения» и «Видимости».
+    - `plugins/calendar-resources/src/eventCard.ts`: `EventCardResolver` может вернуть
+      `EventCardWithEditor { object, editor }`; добавлен `openEventCard()`. `EventElement.svelte` и
+      `Day.svelte` идут через него. Любовь отвечает `{ object: серия, editor: EditMeeting }` для события
+      с миксином `MeetingEventLink`; обычное событие остаётся `EditEvent`.
+    - Это **переопределяет** п. 2.2 изменения `love-office-and-calendar-ui` — там дописано уточнение.
+
+3. **Сохранение пишет серию.** Окно получает вхождение (`ReccuringInstance`); мастер ищется как в
+   `updateReccuringInstance`: `findOne(ReccuringEvent, { calendar, eventId: recurringEventId })`.
+   Поиск по `_id` **не работает** — `recurringEventId` это `eventId` мастера, не его `_id`.
+   Проверка: переименование в окне → имя в списке изменилось → вернули обратно.
+
+4. **`EditEvent` перестроен в том же языке** (kit-секции и строки, `CalendarSelector` в варианте
+   `secondary`, напоминания через `Toggle`+`MenuButton`+чипы). Он остаётся окном календарного события.
+
+5. **Строки и локали.** `models/calendar/src/plugin.ts` — `About`, `When`, `Where`, `Remember`,
+   `Reminder`, `ReminderTime`, `AddReminder`, `NoReminders`, `AllDay`, `TimeZone`;
+   `plugins/love-resources/src/plugin.ts` — `MeetingType`, `RepeatDays/Weeks/Months`, `AllDayHint`
+   (переиспользованы существующие `RecurringMeeting`, `OneOffMeeting`). Переводы — во всех 12 локалях
+   `calendar-assets` и `love-assets`. Строка, объявленная только в lang-файле, в разметке даёт `undefined`.
+
+6. **`packages/theme/styles/button.scss`** — иконка `secondary`-кнопки наследует цвет подписи
+   (в светлой теме значок был невидим).
+
+### Что осталось (раздел 5 в `tasks.md`)
+
+- Участники: `EventParticipants` (поиск, аватары, занятость, RSVP, гости по почте) против пикера с
+  чипами из макета — нужно решение владельца, объём разный.
+- Секция «Доступ по ссылке» из макета (сейчас `MeetingLinkPopup`).
+- «Удалить» в футере окна для владельца.
+- Проверить `EditMeetingData`: после разведения окон блок «Встреча/Переговорная/Ссылка» внутри
+  `EditEvent` может быть мёртвым кодом.
+- Светлая тема и узкие экраны окна; поведение без комнат и групп.
+- Компонентные тесты на окно; sanity на клик и сохранение.
+
+### Мелочи, на которые не тратить время завтра
+
+- В Playwright кнопка «Сохранить» может «перекрываться» телом окна при прокрутке — это артефакт
+  автоскролла, в браузере нажатие работает (проверяли `el.click()`).
+- Сборка: `pnpm build --to @hcengineering/model-calendar` **до** сборки `love-resources`, иначе
+  типы `calendar.string.*` в редакторе не обновятся и покажут ложные ошибки.
+
 ## 2026-11-24 (вечер): итог дня, точка входа на 2026-11-25
 
 **Работаем в:** `c:\Users\Андрей\Desktop\project\platform\platform`, ветка `FUSIO-1307-livekit-shared-link`,
@@ -13,32 +77,32 @@ HEAD `ab97fd3f7f` («переделанное отображение модал�
 ### Что сделано и проверено сегодня
 
 1. **Единый источник встреч** (изменение `openspec/changes/love-meetings-single-source/`).
-   - Каждая встреча раздела «Встречи» хранится документом `PermanentMeeting`; `Event` создаёт только
-     путь планировщика.
-   - Модель `models/love/src/index.ts`: `duration?: number` (`TypeNumber`, строка `Duration`) и
-     `room?: Ref<Room>` у `TPermanentMeeting`.
-   - Миграция `models/love/src/migration.ts` → `eventMeetingsToPermanent`, state
-     `event-meeting-to-permanent`, режим `upgrade`: событие без `recurringEventId` и без
-     `link.permanentMeeting` получает документ встречи (`calendar: true`, `startDate`, `duration`,
-     участники из `contact.mixin.Employee`, `group`), затем в `Event.link` пишется `permanentMeeting`.
-     Идемпотентна, события не удаляет.
-   - Миграция **применена** на стенде: понижали `global_account.workspace_status.version_patch` до 16,
-     `WS_OPERATION=all+backup` прогнал upgrade; документы созданы для `test`, `test2`, `One-off check`,
-     `еуыеыеые`.
-   - `plugins/love-resources/src/permanentMeetingSchedule.ts`: `PermanentMeetingInput` получил `duration`,
-     `room`, `calendar`, `series`; `createOneOffMeeting` делегирует в
-     `createPermanentMeetingWithSchedule`, поэтому разовая встреча тоже пишет документ.
+    - Каждая встреча раздела «Встречи» хранится документом `PermanentMeeting`; `Event` создаёт только
+      путь планировщика.
+    - Модель `models/love/src/index.ts`: `duration?: number` (`TypeNumber`, строка `Duration`) и
+      `room?: Ref<Room>` у `TPermanentMeeting`.
+    - Миграция `models/love/src/migration.ts` → `eventMeetingsToPermanent`, state
+      `event-meeting-to-permanent`, режим `upgrade`: событие без `recurringEventId` и без
+      `link.permanentMeeting` получает документ встречи (`calendar: true`, `startDate`, `duration`,
+      участники из `contact.mixin.Employee`, `group`), затем в `Event.link` пишется `permanentMeeting`.
+      Идемпотентна, события не удаляет.
+    - Миграция **применена** на стенде: понижали `global_account.workspace_status.version_patch` до 16,
+      `WS_OPERATION=all+backup` прогнал upgrade; документы созданы для `test`, `test2`, `One-off check`,
+      `еуыеыеые`.
+    - `plugins/love-resources/src/permanentMeetingSchedule.ts`: `PermanentMeetingInput` получил `duration`,
+      `room`, `calendar`, `series`; `createOneOffMeeting` делегирует в
+      `createPermanentMeetingWithSchedule`, поэтому разовая встреча тоже пишет документ.
 
 2. **Разведение календаря раздела и Планировщика** (решение владельца, не путать эти два понятия).
-   - У пользователя два календаря: личный `<uuid>_calendar` и `<uuid>_meetings_calendar` («Meetings»,
-     создаётся по требованию — `MEETINGS_CALENDAR_SUFFIX`, `findOrCreateMeetingsCalendar`).
-   - Встречи, созданные **во вкладке «Встречи»**, кладут событие в календарь «Meetings»; Планировщик
-     этот календарь не читает: фильтр `!(p._id as string).endsWith('_meetings_calendar')` в
-     `plugins/time-resources/src/components/team/WithTeamData.svelte` (переменная `calendarIds`) и в
-     `plugins/time-resources/src/components/PlanningCalendar.svelte` (в колбэке `calendarsQ.query`).
-   - Встреча из сетки/планировщика идёт в личный календарь — событие видно в Планировщике и в календаре.
-   - **Тумблер «в календаре» в окне создания обязателен** (владелец отдельно настаивал). Он есть только
-     в окне, открытом из раздела «Встречи» (`{#if date === undefined}`), и передаётся как `calendar`.
+    - У пользователя два календаря: личный `<uuid>_calendar` и `<uuid>_meetings_calendar` («Meetings»,
+      создаётся по требованию — `MEETINGS_CALENDAR_SUFFIX`, `findOrCreateMeetingsCalendar`).
+    - Встречи, созданные **во вкладке «Встречи»**, кладут событие в календарь «Meetings»; Планировщик
+      этот календарь не читает: фильтр `!(p._id as string).endsWith('_meetings_calendar')` в
+      `plugins/time-resources/src/components/team/WithTeamData.svelte` (переменная `calendarIds`) и в
+      `plugins/time-resources/src/components/PlanningCalendar.svelte` (в колбэке `calendarsQ.query`).
+    - Встреча из сетки/планировщика идёт в личный календарь — событие видно в Планировщике и в календаре.
+    - **Тумблер «в календаре» в окне создания обязателен** (владелец отдельно настаивал). Он есть только
+      в окне, открытом из раздела «Встречи» (`{#if date === undefined}`), и передаётся как `calendar`.
 
 3. **Таблицы/списки показывают все встречи**: постоянные, разовые и без серии — таблица «Всего: 11»,
    затем 29; вкладка «Группы» — секции `Sprint`, `Не указана`.
@@ -56,15 +120,15 @@ HEAD `ab97fd3f7f` («переделанное отображение модал�
    тёмная `rgb(138,143,152)` (≈5:1).
 
 7. **Группы: переименование и удаление из вкладки** (задача 4.4).
-   - `PermanentMeetingGroupPresenter.svelte` принимает `object` — `ListHeader` передаёт документ группы
-     (`categoryRefDoc`) рядом с ref, по которому идёт группировка. **Без `object` меню не рендерилось**:
-     в заголовке секции приходил ref, `doc` оставался `undefined`.
-   - Меню (`IconButton(ui.icon.DotsVertical)`, `data-id="meeting-group-menu"`) → «Переименовать»
-     (`MeetingGroupPopup` в режиме `group`, кнопка `view.string.Rename`, `renameMeetingGroup`) и
-     «Удалить группу» (`MessageBox` → `deleteMeetingGroup` в `groups.ts`: у встреч `$unset { group }`,
-     затем `client.remove(group)`).
-   - Проверено на стенде: `Sprint` → `Sprint QA` → обратно; временная группа `QA temp` с одной встречей
-     удалена, «Не указана» 31 → 32, встреча осталась без группы.
+    - `PermanentMeetingGroupPresenter.svelte` принимает `object` — `ListHeader` передаёт документ группы
+      (`categoryRefDoc`) рядом с ref, по которому идёт группировка. **Без `object` меню не рендерилось**:
+      в заголовке секции приходил ref, `doc` оставался `undefined`.
+    - Меню (`IconButton(ui.icon.DotsVertical)`, `data-id="meeting-group-menu"`) → «Переименовать»
+      (`MeetingGroupPopup` в режиме `group`, кнопка `view.string.Rename`, `renameMeetingGroup`) и
+      «Удалить группу» (`MessageBox` → `deleteMeetingGroup` в `groups.ts`: у встреч `$unset { group }`,
+      затем `client.remove(group)`).
+    - Проверено на стенде: `Sprint` → `Sprint QA` → обратно; временная группа `QA temp` с одной встречей
+      удалена, «Не указана» 31 → 32, встреча осталась без группы.
 
 ### Проверки сегодня
 
@@ -144,6 +208,7 @@ Sanity по ветке **не гонялся**. `openspec validate --all --stric
 
 **Новое изменение:** `openspec/changes/love-meetings-single-source/` (валидно, `openspec validate --strict`).
 Решения владельца 2026-11-24:
+
 - любая встреча из раздела «Встречи» хранится как `PermanentMeeting`; `Event` создаёт только планировщик;
 - в модель добавляется `duration` для разовой встречи;
 - существующие `Event + миксин` переносятся миграцией `event-meeting-to-permanent`;
@@ -162,6 +227,7 @@ Sanity по ветке **не гонялся**. `openspec validate --all --stric
 остальное закрыто в тот же день.
 
 **Итог 2026-11-24 (проверено на стенде `:8080`, dev-server):**
+
 - модель: `duration` и `room` в `TPermanentMeeting`, строка `Duration` в 12 локалях;
 - миграция `event-meeting-to-permanent` применена upgrade'ом воркспейса: для событий `test`, `test2`,
   `One-off check`, `еуыеыеые` созданы документы встреч, события и серии сохранены;
@@ -183,6 +249,7 @@ Sanity по ветке **не гонялся**. `openspec validate --all --stric
 `docs/features/office-meetings.md`.
 
 **Новое изменение:** `openspec/changes/love-meetings-unified-views/` — фиксирует отчёт QA:
+
 - дефекты: контраст кнопки «Новая группа» в светлой теме; пустые группировка и сортировка на странице
   постоянных встреч;
 - требования: единый раздел встреч с 3 представлениями (календарь/список/таблица); убрать создание
@@ -194,6 +261,7 @@ Sanity по ветке **не гонялся**. `openspec validate --all --stric
 группы, вид «разной формы» создания, судьба пункта «Встречи»).
 
 **Решение владельца 2026-11-20 (Р1, Р2) — зафиксировано в `proposal.md` и `design.md` §5:**
+
 - «Постоянные встречи» объединяются с «Встречами»: вкладка «Встречи» = календарь + переключатель
   «Календарь / Список встреч / Таблица встреч»; список и таблица — те, что сейчас в постоянных встречах.
 - Вместо вкладки «Постоянные встречи» — вкладка «Группы», где показываются три набора: встречи
@@ -203,6 +271,7 @@ Sanity по ветке **не гонялся**. `openspec validate --all --stric
   QA-4 не начинать до ответа (см. `proposal.md`, «Открытый вопрос по конфликту QA-4 и Р2»).
 
 **Точки правки (сверено с кодом 2026-11-20):**
+
 - кнопка: `plugins/love-resources/src/components/PermanentMeetingsHeaderActions.svelte:40`,
   стили — `packages/ui/src/ui-kit/button/Button.svelte` блок `&--secondary`;
 - группировка/сортировка: `models/love/src/index.ts` — `TablePermanentMeetings` (`groupBy: []`),
@@ -348,7 +417,7 @@ secondary → primary. `love-resources` 87/87.
 он располагал шаг выбора владельца в строку, и Person / Cancel / Create шли вплотную.
 
 - `AddRoomPopup.svelte` — варианты стали списком строк (`Button kind="ghost" size="medium" width="100%"
-  justify="left"`, шаг 4px, попап `min-width 15rem`, `padding 8px`); шаг владельца — колонка с
+justify="left"`, шаг 4px, попап `min-width 15rem`, `padding 8px`); шаг владельца — колонка с
   `gap 12px` и футером `justify-content: flex-end; gap: 8px`.
 
 **Замеры на :8080:** пункты списка 222×32 с шагом 4px, попап 240×158; в шаге Cancel 66×32 и Create
@@ -442,6 +511,7 @@ Owner/Maintainer показывает поле «Person» (`AssigneeBox`, та �
   моего `ParticipantInfo` (`stores.ts`), который приходит с задержкой — кнопка оставалась «Join».
 
 **Исправлено.**
+
 - `EditPermanentMeeting`: состояние как в `EditRoom` — `inThisMeeting = $lkSessionConnected && (...)` →
   «Leave room» (`data-id="permanent-meeting-leave"`, через `leaveMeeting()`), иначе «Join meeting».
 - `EditMeetingMinutes`: то же сравнение по **встрече**, а не по id документа (`meeting`/`eventId`), плюс
@@ -449,6 +519,7 @@ Owner/Maintainer показывает поле «Person» (`AssigneeBox`, та �
   пока не приедет `ParticipantInfo`.
 
 **Проверено на :8080 (Playwright, живые данные):**
+
 - карточка постоянной встречи: до входа `permanent-meeting-join`=1, после входа `permanent-meeting-leave`=1
   (текст «Leave room»), после выхода снова `permanent-meeting-join`=1;
 - карточка сессии после входа: `meeting-connect`=0, в карточке и в виджете «Leave room»; после выхода

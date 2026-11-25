@@ -19,8 +19,8 @@
 - [x] 1.2 Конфигурация этажа: `RoomConfigure.svelte` — `_class` выбора владельца исправлен с
       `contact.class.Person` на `contact.mixin.Employee` (фильтр `docQuery: { active: true }` — поле миксина).
 - [~] 1.3 Карточка офиса: `EditRoom.svelte` — поле «Person» (`AssigneeBox`, `showNavigate={false}`,
-      100% ширины, 320×32) для роли Owner/Maintainer, `changeOfficePerson` пишет `person` в комнату.
-      **Владелец вид не принял** («что за залупу сделал») — переделать (см. 3.1).
+  100% ширины, 320×32) для роли Owner/Maintainer, `changeOfficePerson` пишет `person` в комнату.
+  **Владелец вид не принял** («что за залупу сделал») — переделать (см. 3.1).
 - [x] 1.4 Переименование этажа: `FloorsNav.svelte` — кнопка «Rename a floor» в заголовке этажа рядом с
       «Add room», `showPopup(EditFloorPopup, { id })`, видна Owner/Maintainer. Проверено: «Second» →
       «Second X» → «Second».
@@ -40,6 +40,13 @@
       `EventElement.svelte` и `Day.svelte`; ветки `eventCard` → `openDoc` и `{ resolvers: false }` удалены.
       `'center'`, а не `'content'`: только позиция с overlay даёт закрытие кликом вне окна
       (`packages/ui/src/popups.ts` → `fitPopupElement`).
+
+        **Уточнение 2026-11-25:** для встреч это больше не так. Клик идёт через
+        `openEventCard(...)` (`plugins/calendar-resources/src/eventCard.ts`), и событие с миксином
+        `MeetingEventLink` открывается окном `EditMeeting` из `love-resources` (заголовок
+        «Настройки встречи»). Обычное событие по-прежнему открывает `EditEvent`. Основание и состав
+        окна — изменение `love-meeting-window`.
+
 - [x] 2.3 Блок «Meeting / комната / Start meeting» в `EditMeetingData.svelte`: kit-`Button` вместо legacy
       `size="x-small"`, один `gap: 8px` вместо `mr-2`/`ml-3`, правая группа `flex-shrink: 0`. Кнопки 32px,
       центры совпадают.
