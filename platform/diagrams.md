@@ -339,3 +339,190 @@ sequenceDiagram
   Note over W,LK: участники, зашедшие позже, переиспользуют эту же встречу<br/>и попадают в ту же комнату
   Note over L,W: /getToken вне окна: владелец встречи (owners)<br/>или владелец workspace переводит Scheduled в Active
 ```
+
+## 12. Создание встречи: два пути и связь между документами (2026-11-06)
+
+Что показывает: какие документы появляются при создании встречи из формы события (реализовано) и из записи
+планировщика (осталось), и кто на кого ссылается после того, как связь переехала в `permanentMeeting`.
+
+```mermaid
+flowchart TD
+  subgraph Event["Форма события — calendar.class.Event (реализовано)"]
+    E1["MeetingData: комната, участники,<br/>сделать постоянной, repeatEvery"] --> E2["createMeeting, фаза post"]
+    E2 --> E3["серия Event + makeRecurring"]
+    E3 --> E4["миксин MeetingEventLink на мастере<br/>linkVersion, meetingAccess, reminderBefore"]
+    E4 --> E5{"переключатель включён?"}
+    E5 -->|да| E6["PermanentMeeting<br/>repeatEvery, members, owners"]
+    E6 --> E7["MeetingEventLink.permanentMeeting = _id"]
+    E5 -->|нет| E8["только серия"]
+  end
+
+  subgraph Planner["Запись планировщика — calendar.class.Schedule (осталось)"]
+    P1["MeetingScheduleData: комната,<br/>участники, промежуток"] --> P2["createMeetingSchedule, фаза post"]
+    P2 --> P3["серия Event + миксин<br/>(тот же код, что у события)"]
+    P2 --> P4["PermanentMeeting"]
+    P4 --> P5["MeetingSchedule.meetingId = _id"]
+  end
+
+  E4 --> T1["Вкладка «Встречи»<br/>SpecialView на миксине"]
+  P3 --> T1
+  E6 --> T2["Вкладка «Постоянные встречи»<br/>SpecialView на PermanentMeeting"]
+  P4 --> T2
+  E4 --> B1["Бейдж входа на карточке<br/>EventCardExtensions"]
+  P3 --> B1
+  B1 --> S["Сессия MeetingMinutes<br/>eventId + occurrence"]
+```
+
+Почему так: миксин `MeetingEventLink` объявлен на `calendar.class.Event`, поэтому запись планировщика сама попасть
+во вкладку «Встречи» не может — путь планировщика обязан создать серию событий. Ссылки две, каждая со своей стороны:
+`MeetingEventLink.permanentMeeting` (серия → постоянная встреча) и `MeetingSchedule.meetingId`
+(запись планировщика → постоянная встреча).
+
+## 13. Правка и удаление регулярной встречи (2026-11-06)
+
+Что показывает: что происходит с сессией при правке участников и при удалении серии.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Серия: создание события или записи планировщика
+  Серия --> ЖиваяСессия: вход в комнату, resolveSession
+  ЖиваяСессия --> ЖиваяСессия: добавлен участник (OnEventUpdate, $push members)
+  ЖиваяСессия --> Завершена: удалён мастер серии (OnEventUpdate, TxRemoveDoc)
+  ЖиваяСессия --> Завершена: встреча окончена в панели
+  Серия --> Серия: правка периода (retimedRules)
+  Серия --> ОтменённоеВхождение: exdate вхождения
+  ОтменённоеВхождение --> [*]
+  Завершена --> [*]
+  note right of ЖиваяСессия
+    удаление копии участником ничего не завершает:
+    мастер - только копия с access = Owner
+  end note
+```
+
+## 14. Раздел встреч после QA (изменение love-meetings-unified-views, 2026-11-20)
+
+Что показывает: как требования QA ложатся на текущие точки кода и что зависит от решения владельца.
+
+```mermaid
+flowchart TD
+  QA1["QA-1 контраст «Новая группа»<br/>светлая тема"] --> Btn["PermanentMeetingsHeaderActions:40<br/>Button kind=secondary"]
+  Btn --> Tokens["Button.svelte &--secondary<br/>--kit-button-subtle-LabelColor"]
+  QA2["QA-2 пустые группировка/сортировка"] --> Views["models/love: TablePermanentMeetings,<br/>ListPermanentMeetings"]
+  Views --> Opts["viewOptions.groupBy / orderBy<br/>MODEL_HIDDEN_KEYS"]
+  QA4["QA-4 убрать создание без календаря"] --> Form["PermanentMeetingForm:<br/>allowNoCalendar + ShowInCalendar"]
+  QA6["QA-6 первый шаг: тип встречи"] --> Form
+  QA3["QA-3 календарь/список/таблица"] --> Nav["OfficeNavigator + Hall<br/>officeView"]
+  QA5["QA-5 группы в боковом меню"] --> Nav
+  Nav --> Open{"Решение владельца:<br/>как объединять Event+mixin<br/>и PermanentMeeting: Space"}
+  Open --> A["Агрегатор (SpecialView)"]
+  Open --> B["Два набора под общим<br/>переключателем представлений"]
+  Open --> C["Отдельный вьюлет<br/>поверх MeetingEventLink"]
+```
+
+## 15. Создание встречи после QA-6
+
+Что показывает: новая последовательность шагов и место, где раньше был путь «без календаря».
+
+```mermaid
+stateDiagram-v2
+  [*] --> Тип: «Новая встреча»
+  Тип --> Разовая: выбран «Разовая»
+  Тип --> Повторяющаяся: выбрана «Повторяющаяся»
+  Разовая --> Время
+  Повторяющаяся --> Время
+  Время --> Повтор: только для повторяющейся
+  Время --> Участники: для разовой
+  Повтор --> Участники
+  Участники --> Создание
+  Создание --> Календарь: серия или одиночное событие (путь «без календаря» удалён)
+  Календарь --> [*]
+  note right of Создание
+    QA-4: allowNoCalendar удаляется,
+    встреча всегда видна в календаре
+  end note
+```
+
+## 16. Навигация встреч после решения владельца (2026-11-20, Р1/Р2)
+
+Что показывает: «Постоянные встречи» переезжают в «Встречи», их место занимает вкладка «Группы».
+
+```mermaid
+flowchart LR
+  subgraph Nav["Навигатор офиса"]
+    M["Встречи<br/>/love/meetings"]
+    G["Группы<br/>/love/groups<br/>(было: Постоянные встречи)"]
+    F["Этажи<br/>/love/&lt;floorId&gt;"]
+  end
+  M --> Switch{"Переключатель сверху"}
+  Switch --> Cal["Календарь<br/>(CalendarScheduledMeetings)"]
+  Switch --> List["Список встреч<br/>(было в постоянных)"]
+  Switch --> Table["Таблица встреч<br/>(было в постоянных)"]
+  G --> Set1["Встречи<br/>Event + MeetingEventLink"]
+  G --> Set2["Постоянные встречи<br/>PermanentMeeting + серия"]
+  G --> Set3["Встречи без отображения<br/>PermanentMeeting без серии"]
+  Set1 --> Groups["Секции по MeetingGroup<br/>без группы - последняя"]
+  Set2 --> Groups
+  Set3 --> Groups
+  Old["/love/permanent"] -.->|redirect| G
+```
+
+## 17. Единый источник встреч (2026-11-24, `love-meetings-single-source`)
+
+```mermaid
+flowchart TD
+  A["Раздел «Встречи» → Новая встреча"] --> B["CreateMeetingDialog<br/>calendar: false"]
+  B --> C["PermanentMeeting<br/>repeatEvery? + startDate + duration"]
+  C --> D["Таблица раздела «Встречи»"]
+  C --> E["Вкладка «Группы»<br/>секции по group"]
+  C -.->|"серии нет"| F["Планировщик: ничего"]
+
+  G["Планировщик → создать встречу"] --> H["CreateMeetingDialog<br/>calendar: true"]
+  H --> I["PermanentMeeting"]
+  H --> J["calendar.class.Event<br/>(серия)"]
+  I --> D
+  I --> E
+  J --> K["Планировщик: событие"]
+
+  L["Старые Event + миксин<br/>без permanentMeeting"] -->|"миграция event-meeting-to-permanent"| M["PermanentMeeting<br/>calendar: true"]
+  M --> D
+  M --> E
+```
+
+Легенда: сплошная стрелка — создаётся/показывается, пунктир — «не появляется».
+
+Риски: повторная миграция (защита — условие «нет `permanentMeeting`»), события без `duration`
+(поле необязательное), диалог из планировщика (признак источника передаётся явно и покрыт тестом).
+
+## 18. Два календаря и меню группы (2026-11-24)
+
+```mermaid
+flowchart LR
+  subgraph Раздел["Вкладка «Встречи»"]
+    D1["Новая встреча<br/>тумблер «в календаре»"]
+  end
+  subgraph Планировщик["Планировщик (кнопка app-time:string:Planner)"]
+    P1["создать встречу в сетке"]
+  end
+
+  D1 -->|"тумблер включён"| MC["календарь Meetings<br/>uuid_meetings_calendar"]
+  D1 -->|"тумблер выключен"| NO["без события<br/>(только ссылка)"]
+  P1 --> PC["личный календарь<br/>uuid_calendar"]
+
+  MC --> VC["Календарь раздела: события видны"]
+  MC -.->|"фильтр _meetings_calendar"| XP["Планировщик: НЕ видит"]
+  PC --> VP["Планировщик: видит"]
+```
+
+Группа во вкладке «Группы»:
+
+```mermaid
+flowchart TD
+  H["categoryHeader<br/>ref группы + object={categoryRefDoc}"] --> A["PermanentMeetingGroupPresenter"]
+  A -->|"doc есть"| M["меню (DotsVertical)"]
+  M --> R["Переименовать<br/>MeetingGroupPopup → renameMeetingGroup"]
+  M --> X["Удалить группу<br/>MessageBox → deleteMeetingGroup<br/>$unset group у встреч, затем remove"]
+  A -->|"doc === undefined"| N["меню нет<br/>(сюда приходил ref до 4.4)"]
+```
+
+Легенда: пунктир — «не появляется». Без пропа `object` заголовок секции оставался без документа
+и меню не рендерилось — это и была причина незакрытой 4.4.
